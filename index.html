@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Cenitpede</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover" />
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:#111;color:#eee;font-family:monospace}
+body{overflow:hidden;-webkit-tap-highlight-color:transparent}
+#wr{position:relative;width:100vw;height:100dvh;display:flex;flex-direction:column;background:#000}
+canvas{display:block;background:#1a4927}
+#hud{padding:8px calc(8px+env(safe-area-inset-right)) 60px;background:rgba(0,0,0,.5);display:flex;justify-content:space-between;font-size:13px;z-index:3}
+#touch{position:absolute;left:4px;top:50%;transform:translateY(-50%);z-index:3;display:none}
+@media(hover:hover){#touch{display:none!important}}
+.dpad{width:180px;height:172px;position:relative}
+.btn{position:absolute;background:#3a6;border:2px solid #579;color:#eee;font-size:24px;display:flex;align-items:center;justify-content:center;border-radius:8px;padding:6px 8px;user-select:none;-webkit-user-select:none;touch-action:none;cursor:pointer}
+.btn:active{background:#5a8;border-color:#7b0}
+.dpad .up{top:4px;left:50%;transform:translateX(-50%)}
+.dpad .down{bottom:4px;left:50%;transform:translateX(-50%)}
+.dpad .left{top:50%;left:4px;transform:translateY(-50%)}
+.dpad .right{top:50%;right:4px;transform:translateY(-50%)}
+.fireBtn{position:absolute;width:68px;height:68px;top:calc(50%-34px);right:-72px;background:#e44;border:2px solid #f77;color:white;font-size:14px;display:flex;align-items:center;justify-content:center;border-radius:8px;-webkit-appearance:none;cursor:pointer;touch-action:none}
+.fireBtn:active{background:#d33}
+#ovr{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.7);z-index:4;color:#fff;font-size:20px;text-align:center;padding:30px}
+#ovr h1{font-size:40px;margin-bottom:16px;color:#f99;letter-spacing:6px}
+#ovr p{margin:8px 0;font-size:15px;line-height:1.6}
+</style>
+</head>
+<body>
+<div id="wr">
+<canvas id="cvs" width="320" height="240"></canvas>
+<div id="hud"><span>SCORE <b id="sc">0</b></span><span>LIVES <b id="lv">3</b></span><span>WAVE <b id="wg">1</b></span></div>
+<div id="touch">
+  <div class="dpad">
+    <button class="btn up" data-d="up">&#9650;</button>
+    <button class="btn left" data-d="left">&#9664;</button>
+    <button class="btn right" data-d="right">&#9654;</button>
+    <button class="btn down" data-d="down">&#9660;</button>
+  </div>
+  <button class="fireBtn" id="fb">FIRE</button>
+</div>
+<div id="ovr"><h1>CENITPEDE</h1><p>TAP SCREEN TO START</p><p style="font-size:12px;color:#aaa;margin-top:18px;">ARROWS MOVE &middot; Z or SPACE to FIRE</p></div>
+
+<script>
+(function(){
+"use strict";
+var canvas = document.getElementById("cvs");
+var ctx = canvas.getContext("2d");
+var W = 320, H = 240, DPR = Math.min(window.devicePixelRatio || 1, 2);
+canvas.style.width = W + "px";
+canvas.style.height = H + "px";
+
+// --- refs ---
+var hudSc   = document.getElementById("sc");
+var hudLv   = document.getElementById("lv");
+var hudWg   = document.getElementById("wg");
+var ovrEl   = document.getElementById("ovr");
+var fbBtn   = document.getElementById("fb");
+
+// --- game state ---
+var player  = { x:160, y:H-24, w:28, h:10 };
+var bullets = [];
+var mush    = [];
+var centi   = [];
+var score   = 0;
+var lives   = 3;
+var wave    = 1;
+var keys    = {};
+var running = false;
+
+// --- helpers ---
+function rnd(a,b){return a+Math.random()*(b-a)}
+function rectHit(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y }
+
+// --- input: keyboard (arrows + WASD) ---
+(function(){
+  var keySet = ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD"];
+  document.addEventListener("keydown",function(e){if(keySet.indexOf(e.key)>=0){e.preventDefault();keys[e.key]=true;}});
+  document.addEventListener("keyup",function(e){if(keySet.indexOf(e.key)>=0){keys[e.key]=false;}});
+})();
+
+// --- input: touch dpad buttons ---
+(function(){
+  var btnMap = {up:".btn.up",down:".btn.down",left:".btn.left",right:".btn.right"};
+  for(var d in btnMap){
+    (function(dName, sel){
+      var el = document.querySelector(sel); if(!el) return;
+      el.addEventListener("touchstart",function(e){e.preventDefault();keys[dName]=true;});
+      el.addEventListener("touchend",function(){keys[dName]=false;});
+    })(d,d);
+  }
+})();
+
+// --- input: FIRE button + keyboard Z/Space ---
+(function(){
+  fbBtn.addEventListener("touchstart",function(e){e.preventDefault();fireBullet();});
+  fbBtn.addEventListener("click",function(){fireBullet();});
+  document.addEventListener("keydown",function(e){if(e.key==="z"||e.key==="Z"){e.preventDefault();fireBullet();}});
+})();
+
+// --- overlay: tap to start/restart ---
+(function(){
+  ovrEl.addEventListener("touchend",function(){startGame();});
+  ovrEl.addEventListener("mousedown",function(){startGame();});
+})();
+
+// --- shoot ---
+function fireBullet(){
+  if(!running) return;
+  bullets.push({x:player.x, y:player.y-4, w:6, h:10, spd:6.5});
+}
+
+// --- start / restart game ---
+function startGame(){
+  running = true;
+  player.x=160; player.y=H-24;
+  bullets=[]; mush=[]; centi=[];
+  score=0; lives=3; wave=1;
+  ovrEl.style.display="none";
+  loop();
+}
+
+// --- spawn helpers ---
+function spawnMush(){
+  if(mush.length<6){
+    mush.push({x:rnd(-8,W+8),y:-24,w:14,h:30, stemH:7});
+  }
+}
+function spawnCenti(){
+  var segCount = wave*5;
+  centi.push({
+    segments:[], dirX:1, speed:.9+wave*.08, t:0, alive:true,
+    x:rnd(-24,W+24), y:-8
+  });
+  for(var i=0;i<segCount;i++){
+    centi[centi.length-1].segments.push({x:centi[centi.length-1].x+i*2.5,y:centi[centi.length-1].y,w:12,h:8});
+  }
+}
+
+// --- fixed-timestep loop ---
+var lastT=performance.now(), acc=0, TARGET=16;
+function loop(){
+  if(!running){requestAnimationFrame(loop);return;}
+  requestAnimationFrame(loop);
+  var now=performance.now(); acc+=now-lastT; lastT=now;
+  while(acc>TARGET){update(TARGET); acc-=TARGET;}
+  drawGame();
+}
+
+// --- update ---
+function update(dt){
+  // player movement
+  if(keys.ArrowLeft||keys.KeyA) player.x=Math.max(2,player.x-3);
+  if(keys.ArrowRight||keys.KeyD) player.x=Math.min(W-2,player.x+3);
+  if(keys.ArrowUp||keys.KeyW && player.y>4) player.y-=3;
+
+  // bullets move up
+  for(var i=bullets.length-1;i>=0;i--){
+    var b=bullets[i]; b.y-=b.spd;
+    if(b.y<8) bullets.splice(i,1);
+  }
+
+  // mushrooms: spawn, grow stem, fall off top
+  spawnMush();
+  for(var i=mush.length-1;i>=0;i--){
+    var m=mush[i]; m.stemH+=.9;
+    if(m.stemH>24) m.stemH=24;
+    // bullet hits mushroom
+    for(var j=bullets.length-1;j>=0;j--){
+      var b=bullets[j]; if(rectHit(b,m)){mush.splice(i,1);bullets.splice(j,1);score+=15;updateHUD();break;}
+    }
+    // player hits mushroom
+    if(rectHit(player,m)) {lives--;updateHUD();mush.splice(i,1);}
+  }
+
+  // centipedes: spawn periodically based on score/wave
+  var spawnC = wave*20+score<60 && Math.random()<.015;
+if(spawnC) spawnCenti();
+for(var i=centi.length-1;i>=0;i--){
+    var c=centi[i]; if(!c||!c.segments[0]) continue;
+    c.t++;
+    // leader moves forward & up, segments follow with sine wave
+    var head=c.segments[0];
+    head.x+=c.dirX*c.speed;
+    head.y-=.8;
+    for(var j=1;j<c.segments.length;j++){
+      var s2=c.segments[j], p=c.segments[j-1];
+      if(p){ s2.x=p.x+.4*c.speed; s2.y=p.y+Math.sin((c.t*6+j)*.35)*.6; }
+    }
+    // segment off-screen => whole centi is dead when head passes
+  }
+
+  // bullet hits centipede segment -> split into independent segments
+  for(var i=bullets.length-1;i>=0;i--){
+    var b=bullets[i]; if(!b) continue;
+    for(var j=centi.length-1;j>=0;j--){
+      var c=centi[j]; if(!c||!c.segments[0]) continue;
+      // check bullet vs each segment
+      for(var k=c.segments.length-1;k>=0;k--){
+        var s=c.segments[k];
+        if(rectHit(b,s)){
+          bullets.splice(i,1); score+=50; updateHUD();
+          // replace centipede with individual chasers per hit segment
+          c.alive=false;
+          for(var m=k;m<c.segments.length-1;m++){
+            var seg=c.segments[m];
+            var newSeg={x:seg.x+wave*6, y:Math.max(40,H/2), w:seg.w, h:seg.h, spd:.8, alive:true};
+            centi.push(newSeg);
+          }
+        }
+      }
+    }
+  }
+
+  // cleanup dead centipedes (whole body gone)
+  for(var i=centi.length-1;i>=0;i--){
+    var c=centi[i]; if(!c||!c.segments[0]) continue;
+    var head=c.segments[0];
+    if(head.x<-8||head.x>W+24 || !c.alive) centi.splice(i,1);
+  }
+
+  // cleanup individual chasers that went off-screen
+  for(var i=centi.length-1;i>=0;i--){
+    var s=centi[i]; if(!s||!s.alive||s.x<-8||s.x>W+24) centi.splice(i,1);
+  }
+
+  // player vs remaining centi segments -> lose life
+  for(var i=mush.length-1;i>=0;i--){if(rectHit(player,mush[i])){lives--;updateHUD();mush.splice(i,1);}}
+  for(var j=centi.length-1;j>=0;j--){
+    var c=centi[j]; if(!c||!c.segments[0]) continue;
+    var head=c.segments[0]; if(rectHit(player,head)){lives--;updateHUD();break;}
+  }
+
+  // advance wave every 250 points
+  if(score>=wave*250){wave++;}
+  updateHUD();
+}
+
+// --- draw ---
+function drawGame(){
+  ctx.fillStyle="#0d3b1f"; ctx.fillRect(0,0,W,H);
+  // grid lines
+  ctx.strokeStyle="rgba(0,200,80,.15)"; ctx.lineWidth=.5;
+  for(var gy=4;gy<H;gy+=4){var ly=W*gy/H;ctx.beginPath();ctx.moveTo(ly,0);ctx.lineTo(ly,H);ctx.stroke()}
+
+  // mushrooms
+  for(var m of mush){
+    ctx.fillStyle="#6B2"; ctx.fillRect(m.x-m.w/2,m.y+m.stemH-8,m.w,m.h-m.stemH+4);
+    ctx.fillStyle="#3a0";
+    var cy=m.y+m.stemH-5;
+    ctx.beginPath();ctx.arc(m.x,cy,m.w/2,Math.PI,true);ctx.fill()
+  }
+
+  // centipedes — red segmented bodies
+  for(var c of centi){
+    if(!c||!c.segments[0]) continue;
+    ctx.fillStyle="#a33";
+    for(var s of c.segments){
+      ctx.fillRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h);
+      ctx.strokeStyle="#810";ctx.lineWidth=.5;ctx.strokeRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h)
+    }
+  }
+
+  // individual chasers (red dots with trail)
+  for(var i=centi.length-1;i>=0;i--){
+    var s=centi[i]; if(!s||!s.alive) continue;
+    ctx.fillStyle="#c44";ctx.fillRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h);
+  }
+
+  // bullets — yellow sparks
+  for(var b of bullets){
+    ctx.fillStyle="#ff6"; ctx.beginPath();ctx.arc(b.x,b.y+3,3,0,Math.PI*2);ctx.fill()
+  }
+
+  // player ship (blue with glow)
+  ctx.strokeStyle="#9cf"; ctx.lineWidth=1; ctx.strokeRect(player.x-14,player.y,28,8);
+  ctx.fillStyle="#3af"; ctx.fillRect(player.x-14,player.y,28,8);
+}
+
+// --- HUD ---
+function updateHUD(){
+  hudSc.textContent=score;hudLv.textContent=lives;hudWg.textContent=wave;
+}
+
+})(); // IIFE ends
+</script>
+</div>
