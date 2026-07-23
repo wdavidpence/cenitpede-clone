@@ -6,7 +6,7 @@ Build and publish a clean-room, touch-first browser recreation of the original 1
 ## Constraints
 - Repository: `wdavidpence/cenitpede-clone`
 - Public GitHub repository and GitHub Pages deployment.
-- Hermes is project manager and judge only; all implementation, code changes, debugging, and test-writing are delegated to local OpenCode with `ornith/ornith-1.0-9b-mtp`.
+- Hermes is project manager and judge only; all implementation, code changes, debugging, and test-writing are delegated to local OpenCode with `ornith/ornith-1.0-35b`.
 - No Atari ROM code, copied assets, recorded audio, or proprietary source material.
 - Prefer a dependency-free HTML5 Canvas/Web Audio implementation so GitHub Pages and iPhone Safari work without a build service.
 - No “works” claims without concrete test output or live-page verification.
@@ -64,7 +64,7 @@ A 95% score is earned only if the evidence supports it. If the completed build i
 
 ## OpenCode operating protocol
 
-1. Every implementation or debugging request must explicitly name the target repository and use model `ornith/ornith-1.0-9b-mtp`.
+1. Every implementation or debugging request must explicitly name the target repository and use model `ornith/ornith-1.0-35b`.
 2. Prompts must be narrow, phase-specific, and include required verification commands.
 3. OpenCode must not claim success without showing command output or concrete file/commit evidence.
 4. Hermes must inspect the result after every pass and may reject it with a prioritized correction list.

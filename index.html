@@ -40,7 +40,7 @@ canvas{display:block;background:#1a4927}
   </div>
   <button class="fireBtn" id="fb">FIRE</button>
 </div>
-<div id="ovr"><h1>CENITPEDE</h1><p>TAP SCREEN TO START</p><p style="font-size:12px;color:#aaa;margin-top:18px;">ARROWS MOVE &middot; Z or SPACE to FIRE</p></div>
+<div id="ovr"><h1>CENITPEDE</h1><p>TAP SCREEN TO START</p><p id="ovrMsg" style="font-size:15px;color:#ff9;margin-top:12px;display:none"></p><p style="font-size:12px;color:#aaa;margin-top:18px;">ARROWS MOVE &middot; Z or SPACE to FIRE</p></div>
 
 <script>
 (function(){
@@ -59,15 +59,86 @@ var ovrEl   = document.getElementById("ovr");
 var fbBtn   = document.getElementById("fb");
 
 // --- game state ---
-var player  = { x:160, y:H-24, w:28, h:10 };
+var player  = { x:160, y:H-24, w:28, h:10, invT:0 };
 var bullets = [];
 var mush    = [];
 var centi   = [];
+var fleas   = [];
+var spiders = [];
+var scorpions = [];
+var spiderSpawnTimer = 0;
+var fleaSpawnTimer = 0;
+var scorpionSpawnTimer = 0;
+var SPIDER_SPAWN_INTERVAL = 600; // frames (~9.6s at 60fps)
+var SPIDER_HUNT_RANGE = 150;
+var SPIDER_SPEED = 2.2;
+var SPIDER_SCORE = 75;
+var FLEA_SPAWN_INTERVAL = 900;
+var FLEA_SPEED = 3.5;
+var FLEA_SCORE = 100;
+var FLEA_MAX = 2;
+var SCORPION_SPAWN_INTERVAL = 1200; // frames (~19.2s at 60fps)
+var SCORPION_SPEED = 1.8;
+var SCORPION_SCORE = 500;
 var score   = 0;
 var lives   = 3;
 var wave    = 1;
+var gameOver= false;
 var keys    = {};
 var running = false;
+
+// --- particle FX state (bounded, capped at 80) ---
+var fxPars   = [];       // {x,y,vx,vy,life,color}
+var FX_MAX   = 80;
+var FX_LIFE  = 24;       // frames before a particle dies
+
+// --- spawn burst of particles at (x,y) ---
+function spawnBurst(x, y, color, count){
+  for(var i=0;i<count;i++){
+    var a=(i/FX_MAX)*Math.PI*2;
+    fxPars.push({x:x+5*Math.cos(a),y:y+5*Math.sin(a),vx:5*Math.cos(a)+Math.random()*3-1.5,vy:5*Math.sin(a)+Math.random()*3-1.5,life:FX_LIFE,color});
+  }
+}
+
+// --- update FX particles each frame; cap at 80; remove dead ---
+function updateFx(){
+  for(var i=fxPars.length-1;i>=0;i--){
+    var p = fxPars[i];
+    if(!p) continue;
+    p.x += p.vx; p.y += p.vy; p.life--;
+    // cap enforcement: oldest particles die first when over limit
+    if(fxPars.length > FX_MAX){
+      fxPars.splice(0,fxPars.length-FX_MAX);
+    }
+  }
+}
+
+// --- draw FX particles ---
+function drawFx(){
+  for(var p of fxPars){
+    ctx.globalAlpha = Math.max(0,p.life/FX_LIFE);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x-2,p.y-2,4,4);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// --- wire FX into collision events below this line ---
+// (bullet-hit, player-damage) triggered by updateFx calls inside loop() and drawGame()
+
+// --- wave management ---
+var centiSpawned = 0;       // segments spawned this wave
+var centiTarget  = 0;       // total segments to spawn for current wave
+
+// --- grid config for mushrooms (8 cols × 5 rows, cell=40×24) ---
+var MUSH_COLS = 8, MUSH_ROWS = 5;
+var MUSH_CW = 40, MUSH_CH = 24;
+var MUSH_OFF_X = 20, MUSH_OFF_Y = 16;
+
+// --- poison state constants ---
+var POISON_DMG = 3;       // damage per tick to centipede segments
+var POISON_TICK = 500;    // ms between poison ticks
+var POISON_LIFE = 4000;   // ms a poisoned mushroom stays active
 
 // --- helpers ---
 function rnd(a,b){return a+Math.random()*(b-a)}
@@ -80,68 +151,157 @@ function rectHit(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a
   document.addEventListener("keyup",function(e){if(keySet.indexOf(e.key)>=0){keys[e.key]=false;}});
 })();
 
-// --- input: touch dpad buttons ---
+// --- input: touch dpad buttons (lifecycle-safe) ---
 (function(){
   var btnMap = {up:".btn.up",down:".btn.down",left:".btn.left",right:".btn.right"};
   for(var d in btnMap){
     (function(dName, sel){
       var el = document.querySelector(sel); if(!el) return;
-      el.addEventListener("touchstart",function(e){e.preventDefault();keys[dName]=true;});
-      el.addEventListener("touchend",function(){keys[dName]=false;});
+      var map = {up:"ArrowUp",down:"ArrowDown",left:"ArrowLeft",right:"ArrowRight"};
+      function onEnd(){keys[map[dName]]=false;}
+      el.addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation();keys[map[dName]]=true;});
+      el.addEventListener("touchend",onEnd);
+      el.addEventListener("touchcancel",onEnd);
+      // slide-off-finger: release key if touch moves outside button bounds
+      el.addEventListener("touchmove",function(ev){
+        var t=ev.changedTouches[0]; if(!t) return;
+        var r=el.getBoundingClientRect();
+        if(t.clientX<r.left||t.clientX>r.right||t.clientY<r.top||t.clientY>r.bottom){onEnd();}
+      });
     })(d,d);
   }
 })();
 
 // --- input: FIRE button + keyboard Z/Space ---
 (function(){
-  fbBtn.addEventListener("touchstart",function(e){e.preventDefault();fireBullet();});
+  fbBtn.addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation();fireBullet();});
   fbBtn.addEventListener("click",function(){fireBullet();});
   document.addEventListener("keydown",function(e){if(e.key==="z"||e.key==="Z"){e.preventDefault();fireBullet();}});
 })();
 
 // --- overlay: tap to start/restart ---
 (function(){
-  ovrEl.addEventListener("touchend",function(){startGame();});
+  ovrEl.addEventListener("touchstart",function(e){e.preventDefault();startGame();});
   ovrEl.addEventListener("mousedown",function(){startGame();});
 })();
 
-// --- shoot ---
+// --- shoot (regular or poisoned based on nearby mushrooms) ---
 function fireBullet(){
   if(!running) return;
-  bullets.push({x:player.x, y:player.y-4, w:6, h:10, spd:6.5});
+  var poisoned = false;
+  // check if player is near a poisoned mushroom → fire poisoned bullet
+  for(var i=0;i<mush.length;i++){
+    var m=mush[i];
+    if(m.poisoned){
+      var dx=player.x-m.x, dy=player.y-m.y;
+      if(Math.sqrt(dx*dx+dy*dy)<MUSH_CW*1.5){ poisoned=true; break; }
+    }
+  }
+  bullets.push({x:player.x, y:player.y-4, w:6, h:10, spd:poisoned?4:6.5, poisoned:poisoned, pTimer:0});
 }
 
 // --- start / restart game ---
 function startGame(){
   running = true;
-  player.x=160; player.y=H-24;
-  bullets=[]; mush=[]; centi=[];
-  score=0; lives=3; wave=1;
+  gameOver = false;
+  player.x=160; player.y=H-24; player.invT=0;
+  bullets=[]; mush=[]; centi=[]; fleas=[]; spiders=[]; scorpions=[];
+  fxPars=[];
+  score=0; lives=3; wave=1; spiderSpawnTimer=0; fleaSpawnTimer=0; scorpionSpawnTimer=0;
+  centiSpawned=0; centiTarget=Math.min(wave*5+(wave-1)*2,40);
   ovrEl.style.display="none";
+  document.getElementById("ovrMsg").style.display="none";
   loop();
 }
 
-// --- spawn helpers ---
+// --- show game over overlay ---
+function showGameOver(){
+  gameOver = true;
+  running = false;
+  var msg = document.getElementById("ovrMsg");
+  ovrEl.querySelector("h1").textContent = "GAME OVER";
+  msg.textContent = "SCORE: " + score + "  |  WAVE: " + wave;
+  msg.style.display = "block";
+  ovrEl.style.display = "flex";
+}
+
+// --- start next wave ---
+function startNextWave(){
+  wave++;
+  centiSpawned=0;
+  // difficulty scales with wave: more segments, faster speed
+  centiTarget = Math.min(wave * 5 + (wave-1)*2, 40);
+  hudWg.textContent = wave;
+}
+
+// --- spawn one centipede wave (all segments at once) ---
+function spawnWaveCenti(){
+  if(centiSpawned >= centiTarget) return;
+  var segCount = Math.min(wave * 2 + 3, 18);
+  var headY = -8;
+  // descend one row every few waves for variety
+  if(wave > 1 && centiSpawned % 3 === 0) headY += 8;
+  centi.push({
+    segments:[], dirX: 1, speed: Math.min(0.9 + wave*0.12, 3.5), t:0, alive:true,
+    x: rnd(-24,W+24), y: headY
+  });
+  var last = centi[centi.length-1];
+  for(var i=0;i<segCount;i++){
+    last.segments.push({x:last.x - i*2.5, y:last.y, w:12, h:8});
+  }
+  centiSpawned++;
+}
+
+// --- grid-aligned mushroom placement (stable, no falling) ---
 function spawnMush(){
-  if(mush.length<6){
-    mush.push({x:rnd(-8,W+8),y:-24,w:14,h:30, stemH:7});
+  // fill grid slots that are empty; mushrooms stay in place
+  for(var r=0;r<MUSH_ROWS;r++){
+    for(var c2=0;c2<MUSH_COLS;c2++){
+      var occupied = false;
+      for(var i=0;i<mush.length;i++){
+        if(mush[i].gR===r && mush[i].gC===c2){occupied=true;break;}
+      }
+      if(!occupied){
+        mush.push({
+          x: MUSH_OFF_X + c2*MUSH_CW,
+          y: MUSH_OFF_Y + r*MUSH_CH,
+          w: 18, h: 14, stemH: 0,
+          gR: r, gC: c2,       // grid row/col for stable placement
+          poisoned: false,      // bullet damage state
+          pTimer: 0             // poison decay timer (ms)
+        });
+        return;                // one mushroom per frame max
+      }
+    }
   }
 }
-function spawnCenti(){
-  var segCount = wave*5;
-  centi.push({
-    segments:[], dirX:1, speed:.9+wave*.08, t:0, alive:true,
-    x:rnd(-24,W+24), y:-8
-  });
-  for(var i=0;i<segCount;i++){
-    centi[centi.length-1].segments.push({x:centi[centi.length-1].x+i*2.5,y:centi[centi.length-1].y,w:12,h:8});
+
+// --- apply poison to centipede segments near a poisoned mushroom ---
+function tickPoison(dt){
+  for(var i=mush.length-1;i>=0;i--){
+    var m=mush[i]; if(!m.poisoned) continue;
+    m.pTimer += dt;
+    if(m.pTimer >= POISON_LIFE){ m.poisoned=false; m.pTimer=0; }
+    // damage every centipede segment within 2 cells of the mushroom
+    for(var j=centi.length-1;j>=0;j--){
+      var c=centi[j]; if(!c||!c.segments[0]) continue;
+      for(var k=c.segments.length-1;k>=0;k--){
+        var s=c.segments[k];
+        var dx=s.x-m.x, dy=s.y-m.y;
+        if(Math.abs(dx)<MUSH_CW*2 && Math.abs(dy)<MUSH_CH*2){
+          // apply damage: shrink segment size proportionally
+          s.w = Math.max(4, s.w - POISON_DMG);
+          s.h = Math.max(3, s.h - POISON_DMG/2);
+        }
+      }
+    }
   }
 }
 
 // --- fixed-timestep loop ---
 var lastT=performance.now(), acc=0, TARGET=16;
 function loop(){
-  if(!running){requestAnimationFrame(loop);return;}
+  if(!running || gameOver){requestAnimationFrame(loop);return;}
   requestAnimationFrame(loop);
   var now=performance.now(); acc+=now-lastT; lastT=now;
   while(acc>TARGET){update(TARGET); acc-=TARGET;}
@@ -150,105 +310,261 @@ function loop(){
 
 // --- update ---
 function update(dt){
-  // player movement
+  // player movement + invincibility timer
   if(keys.ArrowLeft||keys.KeyA) player.x=Math.max(2,player.x-3);
   if(keys.ArrowRight||keys.KeyD) player.x=Math.min(W-2,player.x+3);
-  if(keys.ArrowUp||keys.KeyW && player.y>4) player.y-=3;
+  if((keys.ArrowUp||keys.KeyW) && player.y>4) player.y-=3;
+  if(player.invT > 0){ player.invT -= 16; }
 
-  // bullets move up
+  // bullets move up (poisoned bullets travel slower but don't destroy mushrooms)
   for(var i=bullets.length-1;i>=0;i--){
     var b=bullets[i]; b.y-=b.spd;
-    if(b.y<8) bullets.splice(i,1);
+    if(b.poisoned){ b.pTimer = (b.pTimer||0) + 16; }
+    if(b.y<8 || (b.poisoned && b.pTimer>POISON_LIFE)) bullets.splice(i,1);
   }
 
-  // mushrooms: spawn, grow stem, fall off top
+  // mushrooms: spawn on grid, apply poison from bullets, tick poison damage
   spawnMush();
   for(var i=mush.length-1;i>=0;i--){
-    var m=mush[i]; m.stemH+=.9;
-    if(m.stemH>24) m.stemH=24;
-    // bullet hits mushroom
+    var m=mush[i];
+    // bullet hits mushroom → apply poison state (no destruction)
     for(var j=bullets.length-1;j>=0;j--){
-      var b=bullets[j]; if(rectHit(b,m)){mush.splice(i,1);bullets.splice(j,1);score+=15;updateHUD();break;}
+      var b=bullets[j]; if(rectHit(b,m)){
+        bullets.splice(j,1); score+=5; updateHUD();
+        m.poisoned = true; m.pTimer = 0;   // poison the mushroom
+        break;
+      }
     }
-    // player hits mushroom
-    if(rectHit(player,m)) {lives--;updateHUD();mush.splice(i,1);}
+    // player hits mushroom → safe: no life loss, just push player back
+    if(rectHit(player,m)){
+      // nudge player away from mushroom (safe collision)
+      var dx=player.x-m.x, dy=player.y-m.y;
+      if(Math.abs(dx)>Math.abs(dy)) player.x += (dx>0?4:-4); else player.y += (dy>0?4:-4);
+    }
   }
 
-  // centipedes: spawn periodically based on score/wave
-  var spawnC = wave*20+score<60 && Math.random()<.015;
-if(spawnC) spawnCenti();
-for(var i=centi.length-1;i>=0;i--){
-    var c=centi[i]; if(!c||!c.segments[0]) continue;
+  // tick poison damage on centipedes
+  tickPoison(16);
+
+  // spawn centipede segments for current wave (one at a time, spread across frames)
+  if(centiSpawned < centiTarget){
+    spawnWaveCenti();
+  }
+
+  // update all centipede groups and their segments
+  for(var i=centi.length-1;i>=0;i--){
+    var c=centi[i]; if(!c || !c.segments[0]) continue;
     c.t++;
-    // leader moves forward & up, segments follow with sine wave
+    // save previous positions before moving anything
+    var prev=[];
+    for(var pi=0;pi<c.segments.length;pi++) prev.push({x:c.segments[pi].x, y:c.segments[pi].y});
+    // head moves horizontally; reverse & descend at screen edges
     var head=c.segments[0];
-    head.x+=c.dirX*c.speed;
-    head.y-=.8;
-    for(var j=1;j<c.segments.length;j++){
-      var s2=c.segments[j], p=c.segments[j-1];
-      if(p){ s2.x=p.x+.4*c.speed; s2.y=p.y+Math.sin((c.t*6+j)*.35)*.6; }
+    if(head.x + c.dirX*c.speed < -8 || head.x + c.dirX*c.speed > W+24){
+      c.dirX *= -1;
+      head.y += 8;
     }
-    // segment off-screen => whole centi is dead when head passes
+    head.x += c.dirX * c.speed;
+    // each segment follows the prior segment's previous position
+    for(var j=1;j<c.segments.length;j++){
+      var s2=c.segments[j], pp=prev[j-1];
+      if(pp){
+        var dx=pp.x-s2.x, dy=pp.y-s2.y;
+        var dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist>0){var step=Math.min(c.speed,dist);s2.x+=dx/dist*step;s2.y+=dy/dist*step;}
+      }
+    }
+
+    // bullet hits centipede segment -> split into independent chasers
+    for(var bi=bullets.length-1;bi>=0;bi--){
+      var b=bullets[bi]; if(!b) continue;
+      for(var sk=c.segments.length-1;sk>=0;sk--){
+        var seg=c.segments[sk];
+        if(rectHit(b,seg)){
+          bullets.splice(bi,1); score+=50; updateHUD();
+          spawnBurst(seg.x, seg.y, "#af5", 6); // bullet-hit feedback
+          // remove this segment from the group and make it a chaser
+          c.segments.splice(sk,1);
+          centi.push({
+            segments:[{x:seg.x+wave*4, y:Math.max(40,H/2), w:seg.w, h:seg.h}],
+            dirX: 1, speed: 0.8, t:0, alive:true, x: seg.x+wave*4, y: Math.max(40,H/2)
+          });
+          break; // bullet consumed, stop checking this bullet
+        }
+      }
+    }
+
+    // if all segments destroyed, mark for cleanup
+    if(c.segments.length === 0) c.alive = false;
   }
 
-  // bullet hits centipede segment -> split into independent segments
-  for(var i=bullets.length-1;i>=0;i--){
-    var b=bullets[i]; if(!b) continue;
-    for(var j=centi.length-1;j>=0;j--){
-      var c=centi[j]; if(!c||!c.segments[0]) continue;
-      // check bullet vs each segment
-      for(var k=c.segments.length-1;k>=0;k--){
-        var s=c.segments[k];
-        if(rectHit(b,s)){
-          bullets.splice(i,1); score+=50; updateHUD();
-          // replace centipede with individual chasers per hit segment
-          c.alive=false;
-          for(var m=k;m<c.segments.length-1;m++){
-            var seg=c.segments[m];
-            var newSeg={x:seg.x+wave*6, y:Math.max(40,H/2), w:seg.w, h:seg.h, spd:.8, alive:true};
-            centi.push(newSeg);
+  // remove dead centipede groups and off-screen chasers in one pass
+  for(var i=centi.length-1;i>=0;i--){
+    var c=centi[i]; if(!c || !c.segments[0]) continue;
+    var head=c.segments[0];
+    if(!c.alive || head.x < -24 || head.x > W+24) centi.splice(i,1);
+  }
+
+  // player vs centipede segments -> lose life (with invincibility frames)
+  for(var j=centi.length-1;j>=0;j--){
+    var c=centi[j]; if(!c || !c.segments[0]) continue;
+    var head=c.segments[0];
+    if(rectHit(player,head) && player.invT<=0){
+      lives--; updateHUD(); player.invT = 2000; break;
+    }
+  }
+
+  // spiders: deterministic spawn, hunt player, bullet collision, player collision, cleanup
+  spiderSpawnTimer++;
+  if(spiderSpawnTimer >= SPIDER_SPAWN_INTERVAL && spiders.length < 4){
+    spiderSpawnTimer = 0;
+    var side = Math.random() < 0.5 ? -12 : W + 12;
+    spiders.push({ x: side, y: rnd(20, H - 40), w: 14, h: 10, dirX: side < 0 ? 1 : -1 });
+  }
+  for(var si=spiders.length-1;si>=0;si--){
+    var sp=spiders[si]; if(!sp) continue;
+    // hunt player when in range, else drift toward center
+    var hdx=player.x-sp.x, hdy=player.y-sp.y;
+    var hdist=Math.sqrt(hdx*hdx+hdy*hdy);
+    if(hdist < SPIDER_HUNT_RANGE){
+      sp.dirX = hdx > 0 ? 1 : -1;
+      sp.y += (hdy > 0 ? 1 : -1) * SPIDER_SPEED * 0.6;
+    } else {
+      // drift toward player y slowly
+      if(player.y - sp.y > 4) sp.y += 0.5;
+      else if(sp.y - player.y > 4) sp.y -= 0.5;
+    }
+    sp.x += sp.dirX * SPIDER_SPEED;
+    // bullet hits spider -> score + remove
+    for(var bi2=bullets.length-1;bi2>=0;bi2--){
+      var b2=bullets[bi2]; if(!b2) continue;
+      if(rectHit(b2,sp)){
+        bullets.splice(bi2,1); spiders.splice(si,1); score+=SPIDER_SCORE; updateHUD(); spawnBurst(sp.x, sp.y, "#a7d", 6); break;
+      }
+    }
+    // player hits spider -> lose life with invincibility
+    if(rectHit(player,sp) && player.invT<=0){
+      lives--; updateHUD(); player.invT=2000; break;
+    }
+    // cleanup off-screen
+    if(sp.x < -30 || sp.x > W+30) spiders.splice(si,1);
+  }
+
+  // fleas: deterministic spawn every 900 frames, capped at FLEA_MAX
+  fleaSpawnTimer++;
+  if(fleaSpawnTimer >= FLEA_SPAWN_INTERVAL && fleas.length < FLEA_MAX){
+    fleaSpawnTimer = 0;
+    fleas.push({ x: rnd(16,W-16), y: -12, w: 14, h: 8, killed: false });
+  }
+  for(var fi=fleas.length-1;fi>=0;fi--){
+    var fl=fleas[fi]; if(!fl) continue;
+    // move vertically downward
+    fl.y += FLEA_SPEED;
+    // when crossing a mushroom row, spawn a mushroom only if that grid slot is empty
+    for(var fr=0;fr<MUSH_ROWS;fr++){
+      var rowY = MUSH_OFF_Y + fr*MUSH_CH;
+      if(fl.y >= rowY && fl.y < rowY + FLEA_SPEED + 2){
+        for(var fc=0;fc<MUSH_COLS;fc++){
+          var slotX = MUSH_OFF_X + fc*MUSH_CW;
+          if(Math.abs(fl.x - slotX) < MUSH_CW/2 + 4){
+            var occupied = false;
+            for(var mi=0;mi<mush.length;mi++){
+              if(mush[mi].gR===fr && mush[mi].gC===fc){occupied=true;break;}
+            }
+            if(!occupied){
+              mush.push({
+                x: slotX, y: rowY, w: 18, h: 14, stemH: 0,
+                gR: fr, gC: fc, poisoned: false, pTimer: 0
+              });
+            }
+            break;
           }
         }
       }
     }
+    // bullet hits flea -> score + remove (once)
+    for(var bfi=bullets.length-1;bfi>=0;bfi--){
+      var bf=bullets[bfi]; if(!bf) continue;
+      if(rectHit(bf,fl)){
+        bullets.splice(bfi,1);
+        spawnBurst(fl.x, fl.y, "#fa5", 6); // bullet-hit feedback
+        if(!fl.killed){ fl.killed = true; score += FLEA_SCORE; updateHUD(); }
+        fleas.splice(fi,1); break;
+      }
+    }
+    // player hits flea -> lose life with invincibility
+    if(rectHit(player,fl) && player.invT<=0){
+      lives--; updateHUD(); player.invT=2000; break;
+    }
+    // cleanup off-screen (bottom)
+    if(fl.y > H+16) fleas.splice(fi,1);
   }
 
-  // cleanup dead centipedes (whole body gone)
-  for(var i=centi.length-1;i>=0;i--){
-    var c=centi[i]; if(!c||!c.segments[0]) continue;
-    var head=c.segments[0];
-    if(head.x<-8||head.x>W+24 || !c.alive) centi.splice(i,1);
+  // scorpions: deterministic spawn every 1200 frames during active play, capped at 1
+  scorpionSpawnTimer++;
+  if(scorpionSpawnTimer >= SCORPION_SPAWN_INTERVAL && running && !gameOver && scorpions.length < 1){
+    scorpionSpawnTimer = 0;
+    var side = Math.random() < 0.5 ? -12 : W + 12;
+    scorpions.push({ x: side, y: rnd(30, H-40), w: 22, h: 14, dirX: side < 0 ? 1 : -1, killed: false });
+  }
+  for(var sci=scorpions.length-1;sci>=0;sci--){
+    var sc=scorpions[sci]; if(!sc) continue;
+    // horizontal movement across playfield
+    sc.x += sc.dirX * SCORPION_SPEED;
+    // poison mushrooms it crosses (set poisoned=true, reset pTimer)
+    for(var mi2=mush.length-1;mi2>=0;mi2--){
+      var mc=mush[mi2];
+      if(Math.abs(sc.x - mc.x) < MUSH_CW && Math.abs(sc.y - mc.y) < MUSH_CH){
+        mc.poisoned = true; mc.pTimer = 0;
+      }
+    }
+    // bullet hits scorpion -> score + remove (once)
+    for(var bsi=bullets.length-1;bsi>=0;bsi--){
+      var bs2=bullets[bsi]; if(!bs2) continue;
+      if(rectHit(bs2,sc)){
+        bullets.splice(bsi,1);
+        spawnBurst(sc.x, sc.y, "#a7d", 6); // bullet-hit feedback
+        if(!sc.killed){ sc.killed = true; score += SCORPION_SCORE; updateHUD(); }
+        scorpions.splice(sci,1); break;
+      }
+    }
+    // player hits scorpion -> lose life with existing invulnerability
+    if(rectHit(player,sc) && player.invT<=0){
+      lives--; updateHUD(); player.invT=2000; break;
+    }
+    // cleanup off-screen
+    if(sc.x < -30 || sc.x > W+30) scorpions.splice(sci,1);
   }
 
-  // cleanup individual chasers that went off-screen
-  for(var i=centi.length-1;i>=0;i--){
-    var s=centi[i]; if(!s||!s.alive||s.x<-8||s.x>W+24) centi.splice(i,1);
+  // check life loss -> game over or respawn
+  if(lives <= 0){
+    showGameOver();
+    return;
   }
 
-  // player vs remaining centi segments -> lose life
-  for(var i=mush.length-1;i>=0;i--){if(rectHit(player,mush[i])){lives--;updateHUD();mush.splice(i,1);}}
-  for(var j=centi.length-1;j>=0;j--){
-    var c=centi[j]; if(!c||!c.segments[0]) continue;
-    var head=c.segments[0]; if(rectHit(player,head)){lives--;updateHUD();break;}
+  // wave completion: all centipede segments destroyed and spawn queue empty
+  if(centi.length === 0 && centiSpawned >= centiTarget && centiTarget > 0){
+    startNextWave();
   }
 
-  // advance wave every 250 points
-  if(score>=wave*250){wave++;}
   updateHUD();
+  updateFx();
 }
 
 // --- draw ---
 function drawGame(){
+  drawFx();
   ctx.fillStyle="#0d3b1f"; ctx.fillRect(0,0,W,H);
   // grid lines
   ctx.strokeStyle="rgba(0,200,80,.15)"; ctx.lineWidth=.5;
   for(var gy=4;gy<H;gy+=4){var ly=W*gy/H;ctx.beginPath();ctx.moveTo(ly,0);ctx.lineTo(ly,H);ctx.stroke()}
 
-  // mushrooms
+  // mushrooms (grid-aligned, poisoned ones glow purple)
   for(var m of mush){
-    ctx.fillStyle="#6B2"; ctx.fillRect(m.x-m.w/2,m.y+m.stemH-8,m.w,m.h-m.stemH+4);
-    ctx.fillStyle="#3a0";
-    var cy=m.y+m.stemH-5;
+    var baseColor = m.poisoned ? "#83a" : "#6B2";
+    ctx.fillStyle=baseColor; ctx.fillRect(m.x-m.w/2,m.y-4,m.w,m.h);
+    ctx.fillStyle=m.poisoned?"#619":"#3a0";
+    var cy=m.y-2;
     ctx.beginPath();ctx.arc(m.x,cy,m.w/2,Math.PI,true);ctx.fill()
   }
 
@@ -268,14 +584,63 @@ function drawGame(){
     ctx.fillStyle="#c44";ctx.fillRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h);
   }
 
-  // bullets — yellow sparks
-  for(var b of bullets){
-    ctx.fillStyle="#ff6"; ctx.beginPath();ctx.arc(b.x,b.y+3,3,0,Math.PI*2);ctx.fill()
+  // spiders — dark body with 8 legs and two eyes, hunts player when close
+  for(var spi of spiders){
+    ctx.fillStyle="#2a1";ctx.fillRect(spi.x-spi.w/2,spi.y-spi.h/2,spi.w,spi.h);
+    ctx.strokeStyle="#5c3";ctx.lineWidth=.6;
+    var legOff=spi.dirX>0?-2:2;
+    for(var li=0;li<4;li++){
+      var lx=spi.x-spi.w/2+3+li*3, ly=spi.y;
+      ctx.beginPath();ctx.moveTo(lx,ly-1);ctx.lineTo(lx+legOff,ly-5);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(lx,ly+1);ctx.lineTo(lx+legOff,ly+5);ctx.stroke();
+    }
+    ctx.fillStyle="#f00";ctx.fillRect(spi.x-3,spi.y-2,2,2);ctx.fillRect(spi.x+1,spi.y-2,2,2);
   }
 
-  // player ship (blue with glow)
+  // fleas — small brown bodies with six legs, hop downward
+  for(var fli of fleas){
+    ctx.fillStyle="#654";ctx.fillRect(fli.x-fli.w/2,fli.y-fli.h/2,fli.w,fli.h);
+    ctx.strokeStyle="#432";ctx.lineWidth=.6;
+    var fleg=0.8;
+    for(var fli2=0;fli2<3;fli2++){
+      var flx=fli.x-fli.w/2+2+fli2*4, fly=fli.y;
+      ctx.beginPath();ctx.moveTo(flx,fly-1);ctx.lineTo(flx+fleg,fly-5);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(flx,fly+1);ctx.lineTo(flx+fleg,fly+5);ctx.stroke();
+    }
+    ctx.fillStyle="#321";ctx.fillRect(fli.x-2,fli.y-1,1,1);ctx.fillRect(fli.x+1,fli.y-1,1,1);
+  }
+
+  // scorpions — procedural purple body with pincers, legs, and stinger tail
+  for(var sci of scorpions){
+    var sx=sc.x, sy=sc.y;
+    ctx.fillStyle="#639";ctx.fillRect(sx-8,sy-5,16,10);
+    ctx.fillStyle="#74a";ctx.fillRect(sx-12,sy-3,4,6);
+    ctx.strokeStyle="#96c";ctx.lineWidth=.6;
+    for(var sli=0;sli<4;sli++){
+      var slx=sx-5+sli*4, sly=sy;
+      ctx.beginPath();ctx.moveTo(slx,sly-1);ctx.lineTo(slx+2,sly-6);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(slx,sly+1);ctx.lineTo(slx+2,sly+6);ctx.stroke();
+    }
+    var pDir = sc.dirX > 0 ? -1 : 1;
+    ctx.strokeStyle="#a8f";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(sx+pDir*7,sy-4);ctx.lineTo(sx+pDir*13,sy-7);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(sx+pDir*7,sy+4);ctx.lineTo(sx+pDir*13,sy+7);ctx.stroke();
+    ctx.strokeStyle="#b9f";ctx.lineWidth=.8;
+    ctx.beginPath();ctx.moveTo(sx-sci.dirX*8,sy);ctx.quadraticCurveTo(sx-sci.dirX*14,sy-6,sx-sci.dirX*16,sy-2);ctx.stroke();
+    ctx.fillStyle="#d0f";ctx.fillRect(sx-sci.dirX*17,sy-3,2,2);
+  }
+
+  // bullets — yellow (regular) or purple (poisoned) sparks
+  for(var b of bullets){
+    ctx.fillStyle=b.poisoned?"#a6f":"#ff6"; ctx.beginPath();ctx.arc(b.x,b.y+3,3,0,Math.PI*2);ctx.fill()
+  }
+
+  // player ship (blue with glow, flashes when invincible)
+  var pAlpha = player.invT > 0 ? (Math.floor(player.invT/150)%2===0?0.3:1) : 1;
+  ctx.globalAlpha=pAlpha;
   ctx.strokeStyle="#9cf"; ctx.lineWidth=1; ctx.strokeRect(player.x-14,player.y,28,8);
   ctx.fillStyle="#3af"; ctx.fillRect(player.x-14,player.y,28,8);
+  ctx.globalAlpha=1;
 }
 
 // --- HUD ---
