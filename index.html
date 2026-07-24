@@ -379,7 +379,8 @@ function update(dt){
   // player movement + invincibility timer
   if(keys.ArrowLeft||keys.KeyA) player.x=Math.max(2,player.x-3);
   if(keys.ArrowRight||keys.KeyD) player.x=Math.min(W-2,player.x+3);
-  if((keys.ArrowUp||keys.KeyW) && player.y>4) player.y-=3;
+  if(keys.ArrowUp||keys.KeyW){player.y=Math.max(8,player.y-3);}
+  if(keys.ArrowDown||keys.KeyS){player.y=Math.min(H-player.h/2,player.y+3);}
   if(player.invT > 0){ player.invT -= 16; }
 
   // bullets move up (poisoned bullets travel slower but don't destroy mushrooms)
