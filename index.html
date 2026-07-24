@@ -198,10 +198,73 @@ function fireBullet(){
     }
   }
   bullets.push({x:player.x, y:player.y-4, w:6, h:10, spd:poisoned?4:6.5, poisoned:poisoned, pTimer:0});
+  playSfx("fire");
+}
+
+// --- audio manager (lazy Web Audio API, no-op if unavailable) ---
+var audioCtx = null;
+function initAudio(){
+  if(audioCtx) return;
+  try{
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if(Ctx){
+      audioCtx = new Ctx();
+    }
+  }catch(e){}
+}
+function playSfx(name){
+  if(!audioCtx) return;
+  try{
+    var ctx = audioCtx, now = ctx.currentTime, dur = 0.12, vol = 0.18;
+    var osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    switch(name){
+      case "fire":
+        osc.type="sawtooth"; osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now+dur*0.6);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(vol, now+0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+dur);
+        break;
+      case "mushroom_hit":
+        osc.type="sine"; osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(600, now+dur*0.5);
+        gain.gain.setValueAtTime(vol*0.8, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+dur*0.9);
+        break;
+      case "enemy_hit":
+        osc.type="square"; osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now+dur*0.7);
+        gain.gain.setValueAtTime(vol*1.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+dur*0.95);
+        break;
+      case "player_damage":
+        osc.type="sawtooth"; osc.frequency.setValueAtTime(120, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now+dur*0.8);
+        gain.gain.setValueAtTime(vol*0.6, now);
+        gain.gain.linearRampToValueAtTime(0, now+dur*1.2);
+        break;
+      case "wave_transition":
+        osc.type="sine"; osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(600, now+dur*0.7);
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.linearRampToValueAtTime(0, now+dur*1.5);
+        break;
+      case "game_over":
+        osc.type="triangle"; osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(60, now+dur*1.2);
+        gain.gain.setValueAtTime(vol*0.8, now);
+        gain.gain.linearRampToValueAtTime(0, now+dur*1.4);
+        break;
+    }
+    osc.start(now);
+    osc.stop(now+dur);
+  }catch(e){}
 }
 
 // --- start / restart game ---
 function startGame(){
+  initAudio();
   running = true;
   gameOver = false;
   player.x=160; player.y=H-24; player.invT=0;
@@ -219,6 +282,7 @@ function showGameOver(){
   gameOver = true;
   running = false;
   var msg = document.getElementById("ovrMsg");
+  playSfx("game_over");
   ovrEl.querySelector("h1").textContent = "GAME OVER";
   msg.textContent = "SCORE: " + score + "  |  WAVE: " + wave;
   msg.style.display = "block";
@@ -330,7 +394,7 @@ function update(dt){
     // bullet hits mushroom → apply poison state (no destruction)
     for(var j=bullets.length-1;j>=0;j--){
       var b=bullets[j]; if(rectHit(b,m)){
-        bullets.splice(j,1); score+=5; updateHUD();
+        bullets.splice(j,1); score+=5; playSfx("mushroom_hit"); updateHUD();
         m.poisoned = true; m.pTimer = 0;   // poison the mushroom
         break;
       }
@@ -381,7 +445,7 @@ function update(dt){
       for(var sk=c.segments.length-1;sk>=0;sk--){
         var seg=c.segments[sk];
         if(rectHit(b,seg)){
-          bullets.splice(bi,1); score+=50; updateHUD();
+          bullets.splice(bi,1); score+=50; playSfx("enemy_hit"); updateHUD();
           spawnBurst(seg.x, seg.y, "#af5", 6); // bullet-hit feedback
           // remove this segment from the group and make it a chaser
           c.segments.splice(sk,1);
@@ -410,6 +474,7 @@ function update(dt){
     var c=centi[j]; if(!c || !c.segments[0]) continue;
     var head=c.segments[0];
     if(rectHit(player,head) && player.invT<=0){
+      playSfx("player_damage");
       lives--; updateHUD(); player.invT = 2000; break;
     }
   }
@@ -439,7 +504,7 @@ function update(dt){
     for(var bi2=bullets.length-1;bi2>=0;bi2--){
       var b2=bullets[bi2]; if(!b2) continue;
       if(rectHit(b2,sp)){
-        bullets.splice(bi2,1); spiders.splice(si,1); score+=SPIDER_SCORE; updateHUD(); spawnBurst(sp.x, sp.y, "#a7d", 6); break;
+        bullets.splice(bi2,1); playSfx("enemy_hit"); spiders.splice(si,1); score+=SPIDER_SCORE; updateHUD(); spawnBurst(sp.x, sp.y, "#a7d", 6); break;
       }
     }
     // player hits spider -> lose life with invincibility
@@ -487,6 +552,7 @@ function update(dt){
       var bf=bullets[bfi]; if(!bf) continue;
       if(rectHit(bf,fl)){
         bullets.splice(bfi,1);
+        playSfx("enemy_hit");
         spawnBurst(fl.x, fl.y, "#fa5", 6); // bullet-hit feedback
         if(!fl.killed){ fl.killed = true; score += FLEA_SCORE; updateHUD(); }
         fleas.splice(fi,1); break;
@@ -523,6 +589,7 @@ function update(dt){
       var bs2=bullets[bsi]; if(!bs2) continue;
       if(rectHit(bs2,sc)){
         bullets.splice(bsi,1);
+        playSfx("enemy_hit");
         spawnBurst(sc.x, sc.y, "#a7d", 6); // bullet-hit feedback
         if(!sc.killed){ sc.killed = true; score += SCORPION_SCORE; updateHUD(); }
         scorpions.splice(sci,1); break;
@@ -544,6 +611,7 @@ function update(dt){
 
   // wave completion: all centipede segments destroyed and spawn queue empty
   if(centi.length === 0 && centiSpawned >= centiTarget && centiTarget > 0){
+    playSfx("wave_transition");
     startNextWave();
   }
 
