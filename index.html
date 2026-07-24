@@ -307,10 +307,10 @@ function spawnWaveCenti(){
   var headY = -8;
   // descend one row every few waves for variety
   if(wave > 1 && centiSpawned % 3 === 0) headY += 8;
-  centi.push({
-    segments:[], dirX: 1, speed: Math.min(0.9 + wave*0.12, 3.5), t:0, alive:true,
-    x: rnd(-24,W+24), y: headY
-  });
+    centi.push({
+      segments:[], dirX: 1, speed: Math.min(0.9 + wave*0.12, 3.5), t:0, alive:true, mushTurnCooldown: 0,
+      x: rnd(-24,W+24), y: headY
+    });
   var last = centi[centi.length-1];
   for(var i=0;i<segCount;i++){
     last.segments.push({x:last.x - i*2.5, y:last.y, w:12, h:8});
@@ -424,8 +424,24 @@ function update(dt){
     // save previous positions before moving anything
     var prev=[];
     for(var pi=0;pi<c.segments.length;pi++) prev.push({x:c.segments[pi].x, y:c.segments[pi].y});
-    // head moves horizontally; reverse & descend at screen edges
+    // head moves horizontally; reverse & descend at screen edges or on mushroom encounter
     var head=c.segments[0];
+    // mushroom encounter with cooldown gate: only reverse when mushTurnCooldown <= 0
+    if(c.mushTurnCooldown > 0){c.mushTurnCooldown--;} else {
+      for(var mi=0;mi<mush.length;mi++){
+        var m=mush[mi]; if(!m) continue;
+        var aheadX = head.x + c.dirX*c.speed;
+        var overlap = (c.dirX>0 && m.x < aheadX+12 && m.x+m.w > aheadX-8) ||
+                      (c.dirX<0 && m.x > aheadX-12 && m.x+m.w < aheadX+8);
+        if(overlap){
+          c.dirX *= -1;
+          head.y += MUSH_CH;
+          c.mushTurnCooldown = 12;
+          break;
+        }
+      }
+    }
+    // edge reversal: screen boundaries → reverse & descend
     if(head.x + c.dirX*c.speed < -8 || head.x + c.dirX*c.speed > W+24){
       c.dirX *= -1;
       head.y += 8;
@@ -453,7 +469,7 @@ function update(dt){
           c.segments.splice(sk,1);
           centi.push({
             segments:[{x:seg.x+wave*4, y:Math.max(40,H/2), w:seg.w, h:seg.h}],
-            dirX: 1, speed: 0.8, t:0, alive:true, x: seg.x+wave*4, y: Math.max(40,H/2)
+            dirX: 1, speed: 0.8, t:0, alive:true, mushTurnCooldown: 0, x: seg.x+wave*4, y: Math.max(40,H/2)
           });
           break; // bullet consumed, stop checking this bullet
         }
