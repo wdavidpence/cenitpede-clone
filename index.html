@@ -169,6 +169,9 @@ function drawFlash(){
 var centiSpawned = 0;       // segments spawned this wave
 var centiTarget  = 0;       // total segments to spawn for current wave
 
+// --- WAVE banner state (60-frame centered banner on canvas) ---
+var waveBannerT = 0;        // frames remaining for the WAVE banner display
+
 // --- grid config for mushrooms (8 cols × 5 rows, cell=40×24) ---
 var MUSH_COLS = 8, MUSH_ROWS = 5;
 var MUSH_CW = 40, MUSH_CH = 24;
@@ -336,6 +339,7 @@ function startNextWave(){
   // difficulty scales with wave: more segments, faster speed
   centiTarget = Math.min(wave * 5 + (wave-1)*2, 40);
   hudWg.textContent = wave;
+  waveBannerT=60;
 }
 
 // --- spawn one centipede wave (all segments at once) ---
@@ -421,6 +425,9 @@ function update(dt){
   if(keys.ArrowDown||keys.KeyS){player.y=Math.min(H-player.h/2,player.y+3);}
   if(player.invT > 0){ player.invT -= 16; }
   updateFlash();
+
+  // decrement WAVE banner once per frame; auto-clear when done
+  if(waveBannerT > 0){ waveBannerT--; } else { waveBannerT=0; }
 
   // bullets move up (poisoned bullets travel slower but don't destroy mushrooms)
   for(var i=bullets.length-1;i>=0;i--){
@@ -677,9 +684,23 @@ function update(dt){
   updateFx();
 }
 
+// --- WAVE banner (centered on canvas for ~60 frames after wave++ ) ---
+function drawWaveBanner(){
+  if(waveBannerT<=0) return;
+  ctx.save();
+  var fade = Math.min(1, waveBannerT / 24); // ease-in over first quarter of remaining frames
+  ctx.fillStyle="rgba(255,170,20,"+fade+")";
+  ctx.fillRect(0,0,W,H);
+  ctx.save();
+  ctx.font="bold 16px monospace";ctx.textAlign="center";
+  ctx.fillStyle="#ff9";
+  ctx.fillText("WAVE "+wave,W/2,H/2);
+  ctx.restore();
+  ctx.restore();
+}
+
 // --- draw ---
 function drawGame(){
-  drawFx();
   ctx.fillStyle="#0d3b1f"; ctx.fillRect(0,0,W,H);
   // grid lines
   ctx.strokeStyle="rgba(0,200,80,.15)"; ctx.lineWidth=.5;
@@ -768,8 +789,12 @@ function drawGame(){
   ctx.fillStyle="#3af"; ctx.fillRect(player.x-14,player.y,28,8);
   ctx.globalAlpha=1;
 
-  // screen-flash overlay (on top of all game entities)
+  // particles — drawn after entities so they are visible
+  drawFx();
+
+  // screen-flash overlay (on top of all game entities and particles)
   drawFlash();
+  drawWaveBanner();
 }
 
 // --- HUD ---
