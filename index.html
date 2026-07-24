@@ -103,6 +103,25 @@ var fxPars   = [];       // {x,y,vx,vy,life,color}
 var FX_MAX   = 80;
 var FX_LIFE  = 24;       // frames before a particle dies
 
+// --- screen-flash state (bounded cabinet feedback) ---
+var flashT   = 0;        // remaining frame count of current flash
+var flashColor=null;     // "#fff" hit / "#f44" damage
+var FLASH_CAP=6;         // max flash duration in frames
+
+function triggerFlash(color){
+  if(!flashColor){
+    flashT=1; flashColor=color;
+  } else if (flashColor!==color && flashT<FLASH_CAP){
+    flashT++; flashColor=color;
+  }
+}
+
+// --- decrement flash duration once per update, clear when done ---
+function updateFlash(){
+  if(flashColor&&flashT>0){flashT--;}
+  if(!flashT){flashColor=null;}
+}
+
 // --- spawn burst of particles at (x,y) ---
 function spawnBurst(x, y, color, count){
   for(var i=0;i<count;i++){
@@ -132,6 +151,15 @@ function drawFx(){
     ctx.fillRect(p.x-2,p.y-2,4,4);
   }
   ctx.globalAlpha = 1;
+}
+
+// --- draw screen flash overlay near end of drawGame() ---
+function drawFlash(){
+  if(flashT<=0) return;
+  ctx.save();
+  var r=flashColor==="#fff"?"rgba(255,255,255,"+(flashT/FLASH_CAP)+")":"rgba(255,68,68,"+(flashT/FLASH_CAP)+")";
+  ctx.fillStyle=r;ctx.fillRect(0,0,W,H);
+  ctx.restore();
 }
 
 // --- wire FX into collision events below this line ---
@@ -392,6 +420,7 @@ function update(dt){
   if(keys.ArrowUp||keys.KeyW){player.y=Math.max(8,player.y-3);}
   if(keys.ArrowDown||keys.KeyS){player.y=Math.min(H-player.h/2,player.y+3);}
   if(player.invT > 0){ player.invT -= 16; }
+  updateFlash();
 
   // bullets move up (poisoned bullets travel slower but don't destroy mushrooms)
   for(var i=bullets.length-1;i>=0;i--){
@@ -469,14 +498,14 @@ function update(dt){
     }
 
     // bullet hits centipede segment -> split into independent chasers
-    for(var bi=bullets.length-1;bi>=0;bi--){
-      var b=bullets[bi]; if(!b) continue;
-      for(var sk=c.segments.length-1;sk>=0;sk--){
-        var seg=c.segments[sk];
-        if(rectHit(b,seg)){
-          bullets.splice(bi,1); score+=50; playSfx("enemy_hit"); updateHUD();
-          spawnBurst(seg.x, seg.y, "#af5", 6); // bullet-hit feedback
-          // remove this segment from the group and make it a chaser
+      for(var bi=bullets.length-1;bi>=0;bi--){
+        var b=bullets[bi]; if(!b) continue;
+        for(var sk=c.segments.length-1;sk>=0;sk--){
+          var seg=c.segments[sk];
+          if(rectHit(b,seg)){
+            bullets.splice(bi,1); score+=50; playSfx("enemy_hit"); updateHUD();
+            spawnBurst(seg.x, seg.y, "#af5", 6); // bullet-hit feedback
+            triggerFlash("#fff");                // white flash on hit
           c.segments.splice(sk,1);
           centi.push({
             segments:[{x:seg.x+wave*4, y:Math.max(40,H/2), w:seg.w, h:seg.h}],
@@ -498,15 +527,15 @@ function update(dt){
     if(!c.alive || head.x < -24 || head.x > W+24) centi.splice(i,1);
   }
 
-  // player vs centipede segments -> lose life (with invincibility frames)
-  for(var j=centi.length-1;j>=0;j--){
-    var c=centi[j]; if(!c || !c.segments[0]) continue;
-    var head=c.segments[0];
-    if(rectHit(player,head) && player.invT<=0){
-      playSfx("player_damage");
-      lives--; updateHUD(); player.invT = 2000; break;
+    // player vs centipede segments -> lose life (with invincibility frames)
+    for(var j=centi.length-1;j>=0;j--){
+      var c=centi[j]; if(!c || !c.segments[0]) continue;
+      var head=c.segments[0];
+      if(rectHit(player,head) && player.invT<=0){
+        playSfx("player_damage");
+        lives--; updateHUD(); triggerFlash("#f44"); player.invT = 2000; break;
+      }
     }
-  }
 
   // spiders: deterministic spawn, hunt player, bullet collision, player collision, cleanup
   spiderSpawnTimer++;
@@ -738,6 +767,9 @@ function drawGame(){
   ctx.strokeStyle="#9cf"; ctx.lineWidth=1; ctx.strokeRect(player.x-14,player.y,28,8);
   ctx.fillStyle="#3af"; ctx.fillRect(player.x-14,player.y,28,8);
   ctx.globalAlpha=1;
+
+  // screen-flash overlay (on top of all game entities)
+  drawFlash();
 }
 
 // --- HUD ---
