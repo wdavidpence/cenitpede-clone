@@ -30,7 +30,7 @@ canvas{display:block;background:#1a4927}
 <body>
 <div id="wr">
 <canvas id="cvs" width="320" height="240"></canvas>
-<div id="hud"><span>SCORE <b id="sc">0</b></span><span>LIVES <b id="lv">3</b></span><span>WAVE <b id="wg">1</b></span></div>
+<div id="hud"><span>SCORE <b id="sc">0</b></span><span>LIVES <b id="lv">3</b></span><span>WAVE <b id="wg">1</b></span><span>HIGH <b id="hs">0</b></span></div>
 <div id="touch">
   <div class="dpad">
     <button class="btn up" data-d="up">&#9650;</button>
@@ -84,6 +84,7 @@ var score   = 0;
 var lives   = 3;
 var wave    = 1;
 var gameOver= false;
+try{var hs=parseInt(localStorage.getItem("cenitpede_hs")||"0",10);if(isNaN(hs))hs=0}catch(e){hs=0}var highScore=hs;
 var keys    = {};
 var running = false;
 
@@ -274,6 +275,7 @@ function startGame(){
   centiSpawned=0; centiTarget=Math.min(wave*5+(wave-1)*2,40);
   ovrEl.style.display="none";
   document.getElementById("ovrMsg").style.display="none";
+  var ov=document.getElementById("ovr");if(ov){ov.querySelector("h1").textContent="CENITPEDE";var mp=Array.from(ov.querySelectorAll("p")).find(function(p){return p.id!=="ovrMsg"});if(mp)mp.textContent="TAP SCREEN TO START";}
   loop();
 }
 
@@ -284,7 +286,7 @@ function showGameOver(){
   var msg = document.getElementById("ovrMsg");
   playSfx("game_over");
   ovrEl.querySelector("h1").textContent = "GAME OVER";
-  msg.textContent = "SCORE: " + score + "  |  WAVE: " + wave;
+  msg.textContent = "SCORE: " + score + "  |  HIGH: " + highScore;
   msg.style.display = "block";
   ovrEl.style.display = "flex";
 }
@@ -713,7 +715,9 @@ function drawGame(){
 
 // --- HUD ---
 function updateHUD(){
+  if(score>highScore){highScore=score;try{localStorage.setItem("cenitpede_hs",String(highScore))}catch(e){}}
   hudSc.textContent=score;hudLv.textContent=lives;hudWg.textContent=wave;
+  document.getElementById("hs").textContent=highScore;
 }
 
 })(); // IIFE ends
