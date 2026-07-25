@@ -73,7 +73,8 @@ const MARKERS = [
   'spiders',
   'fleas',
   'scorpions',
-  'WebAudio',
+  // detects AudioContext / webkitAudioContext usage in the inline script
+  'audioWebAudio',
   'touch'
 ];
 
