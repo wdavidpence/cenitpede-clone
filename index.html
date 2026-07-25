@@ -246,6 +246,7 @@ function fireBullet(){
     }
   }
   bullets.push({x:player.x, y:player.y-4, w:6, h:10, spd:poisoned?4:6.5, poisoned:poisoned, pTimer:0});
+  lastShotTime = now;
   playSfx("fire");
 }
 
@@ -570,7 +571,7 @@ function update(dt){
       if(rectHit(player,head) && player.invT<=0){
         playSfx("player_damage");
         lives--; updateHUD(); triggerFlash("#f44");
-        if(lives>0){ player.x=160; player.y=H-24; } else { player.invT = 2000; showGameOver(); return; }
+        if(lives>0){ player.invT=1200; player.x=160; player.y=H-24; } else { player.invT = 2000; showGameOver(); return; }
       }
     }
 
@@ -603,11 +604,12 @@ function update(dt){
       }
     }
     // player hits spider -> lose life (respawn when lives remain, game over otherwise)
-    if(rectHit(player,sp) && player.invT<=0){
-      lives--; updateHUD(); triggerFlash("#f44");
-      if(lives>0){ player.x=160; player.y=H-24; } else { showGameOver(); return; }
-    }
-    // cleanup off-screen
+     if(rectHit(player,sp) && player.invT<=0){
+       lives--; updateHUD(); triggerFlash("#f44");
+       if(lives>0){ player.invT=1200; player.x=160; player.y=H-24; } else { showGameOver(); return; }
+     }
+
+     // cleanup off-screen
     if(sp.x < -30 || sp.x > W+30) spiders.splice(si,1);
   }
 
@@ -658,7 +660,7 @@ function update(dt){
     // player hits flea -> lose life (respawn when lives remain)
     if(rectHit(player,fl) && player.invT<=0){
       lives--; updateHUD(); triggerFlash("#f44");
-      if(lives>0){ player.x=160; player.y=H-24; } else { showGameOver(); return; }
+      if(lives>0){ player.invT=1200; player.x=160; player.y=H-24; } else { showGameOver(); return; }
     }
     // cleanup off-screen (bottom)
     if(fl.y > H+16) fleas.splice(fi,1);
@@ -696,7 +698,7 @@ function update(dt){
     // player hits scorpion -> lose life (respawn when lives remain)
     if(rectHit(player,sc) && player.invT<=0){
       lives--; updateHUD(); triggerFlash("#f44");
-      if(lives>0){ player.x=160; player.y=H-24; } else { showGameOver(); return; }
+      if(lives>0){ player.invT=1200; player.x=160; player.y=H-24; } else { showGameOver(); return; }
     }
     // cleanup off-screen
     if(sc.x < -30 || sc.x > W+30) scorpions.splice(sci,1);
