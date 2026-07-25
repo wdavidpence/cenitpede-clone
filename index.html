@@ -394,6 +394,21 @@ function tickPoison(dt){
   }
 }
 
+function spawnMush(){
+  for(var r=0;r<MUSH_ROWS;r++){
+    for(var c2=0;c2<MUSH_COLS;c2++){
+      var occupied=false;
+      for(var i=0;i<mush.length;i++){
+        if(mush[i].gR===r&&mush[i].gC===c2){occupied=true;break}
+      }
+      if(!occupied){
+        mush.push({x:MUSH_OFF_X+c2*MUSH_CW,y:MUSH_OFF_Y+r*MUSH_CH,w:18,h:14,stemH:0,gR:r,gC:c2,poisoned:false,pTimer:0});
+        return; // one mushroom per frame only when a slot is empty
+      }
+    }
+  }
+}
+
 // --- fixed-timestep loop ---
 var lastT=performance.now(), acc=0, TARGET=16;
 function loop(){
@@ -403,7 +418,6 @@ function loop(){
   while(acc>TARGET){update(TARGET); acc-=TARGET;}
   drawGame();
 }
-
 // --- update ---
 function update(dt){
   // player movement + invincibility timer
@@ -424,8 +438,8 @@ function update(dt){
     if(b.y<8 || (b.poisoned && b.pTimer>POISON_LIFE)) bullets.splice(i,1);
   }
 
-  // mushrooms: spawn on grid, apply poison from bullets, tick poison damage
   spawnMush();
+
   for(var i=mush.length-1;i>=0;i--){
     var m=mush[i];
     // bullet hits mushroom → destroy + spawn two smaller replacements in same row (staggered)
