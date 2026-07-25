@@ -57,10 +57,17 @@ try {
 function scanMarkers(src, markers) {
   const out = {};
   for (const m of markers) {
-    const lowerM   = m.toLowerCase();
-    // tokenize: every maximal run of [A-Za-z0-9_$] is an identifier token
-    const tokens   = src.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || [];
-    out[m] = tokens.some(tok => tok.toLowerCase() === lowerM);
+    if (m === 'audioWebAudio') {
+      // audioWebAudio is an output label; positive when the inline source
+      // contains either 'AudioContext' or 'webkitAudioContext'.
+      const tokens   = src.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || [];
+      out[m] = tokens.some(tok => /audio/.test(tok.toLowerCase()) && /context/.test(tok.toLowerCase()));
+    } else {
+      const lowerM   = m.toLowerCase();
+      // tokenize: every maximal run of [A-Za-z0-9_$] is an identifier token
+      const tokens   = src.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || [];
+      out[m] = tokens.some(tok => tok.toLowerCase() === lowerM);
+    }
   }
   return out;
 }
