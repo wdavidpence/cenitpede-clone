@@ -234,6 +234,8 @@ function rectHit(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a
 // --- shoot (regular or poisoned based on nearby mushrooms) ---
 function fireBullet(){
   if(!running) return;
+  var now=performance.now();
+  if(now-lastShotTime < SHOT_COOLDOWN) return;
   var poisoned = false;
   // check if player is near a poisoned mushroom → fire poisoned bullet
   for(var i=0;i<mush.length;i++){
@@ -247,14 +249,14 @@ function fireBullet(){
   playSfx("fire");
 }
 
-// --- audio manager (lazy Web Audio API, no-op if unavailable) ---
+// --- audio manager (lazy Web Audio API, resumes from user gesture) ---
 var audioCtx = null;
 function initAudio(){
-  if(audioCtx) return;
   try{
     var Ctx = window.AudioContext || window.webkitAudioContext;
     if(Ctx){
-      audioCtx = new Ctx();
+      if(audioCtx && audioCtx.state === 'suspended'){ audioCtx.resume(); return; }
+      if(!audioCtx) audioCtx = new Ctx();
     }
   }catch(e){}
 }
@@ -316,7 +318,7 @@ function startGame(){
   player.x=160; player.y=H-24; player.invT=0;
   bullets=[]; mush=[]; centi=[]; fleas=[]; spiders=[]; scorpions=[];
   fxPars=[];
-  score=0; lives=3; wave=1; spiderSpawnTimer=0; fleaSpawnTimer=0; scorpionSpawnTimer=0;
+  score=0; lives=3; wave=1; spiderSpawnTimer=0; fleaSpawnTimer=0; scorpionSpawnTimer=0; lastShotTime=0;
   centiSpawned=0; centiTarget=Math.min(wave*5+(wave-1)*2,40);
   ovrEl.style.display="none";
   document.getElementById("ovrMsg").style.display="none";
@@ -567,7 +569,8 @@ function update(dt){
       var head=c.segments[0];
       if(rectHit(player,head) && player.invT<=0){
         playSfx("player_damage");
-        lives--; updateHUD(); triggerFlash("#f44"); player.invT = 2000; break;
+        lives--; updateHUD(); triggerFlash("#f44");
+        if(lives>0){ player.x=160; player.y=H-24; } else { player.invT = 2000; showGameOver(); return; }
       }
     }
 
@@ -599,9 +602,10 @@ function update(dt){
         bullets.splice(bi2,1); playSfx("enemy_hit"); spiders.splice(si,1); score+=SPIDER_SCORE; updateHUD(); spawnBurst(sp.x, sp.y, "#a7d", 6); break;
       }
     }
-    // player hits spider -> lose life with invincibility
+    // player hits spider -> lose life (respawn when lives remain, game over otherwise)
     if(rectHit(player,sp) && player.invT<=0){
-      lives--; updateHUD(); player.invT=2000; break;
+      lives--; updateHUD(); triggerFlash("#f44");
+      if(lives>0){ player.x=160; player.y=H-24; } else { showGameOver(); return; }
     }
     // cleanup off-screen
     if(sp.x < -30 || sp.x > W+30) spiders.splice(si,1);
@@ -651,8 +655,10 @@ function update(dt){
       }
     }
     // player hits flea -> lose life with invincibility
+    // player hits flea -> lose life (respawn when lives remain)
     if(rectHit(player,fl) && player.invT<=0){
-      lives--; updateHUD(); player.invT=2000; break;
+      lives--; updateHUD(); triggerFlash("#f44");
+      if(lives>0){ player.x=160; player.y=H-24; } else { showGameOver(); return; }
     }
     // cleanup off-screen (bottom)
     if(fl.y > H+16) fleas.splice(fi,1);
@@ -687,9 +693,10 @@ function update(dt){
         scorpions.splice(sci,1); break;
       }
     }
-    // player hits scorpion -> lose life with existing invulnerability
+    // player hits scorpion -> lose life (respawn when lives remain)
     if(rectHit(player,sc) && player.invT<=0){
-      lives--; updateHUD(); player.invT=2000; break;
+      lives--; updateHUD(); triggerFlash("#f44");
+      if(lives>0){ player.x=160; player.y=H-24; } else { showGameOver(); return; }
     }
     // cleanup off-screen
     if(sc.x < -30 || sc.x > W+30) scorpions.splice(sci,1);
