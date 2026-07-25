@@ -327,6 +327,7 @@ function startGame(){
   ovrEl.style.display="none";
   document.getElementById("ovrMsg").style.display="none";
   var ov=document.getElementById("ovr");if(ov){ov.querySelector("h1").textContent="CENITPEDE";var mp=Array.from(ov.querySelectorAll("p")).find(function(p){return p.id!=="ovrMsg"});if(mp)mp.textContent="TAP SCREEN TO START";}
+  var lastT=performance.now(), acc=0;
   loop();
 }
 
@@ -765,7 +766,7 @@ function drawGame(){
 
   // individual chasers (red dots with trail)
   for(var i=centi.length-1;i>=0;i--){
-    var s=centi[i]; if(!s||!s.alive) continue;
+    var c=centi[i], s=c.segments[0]; if(!c||!s) continue;
     ctx.fillStyle="#c44";ctx.fillRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h);
   }
 
