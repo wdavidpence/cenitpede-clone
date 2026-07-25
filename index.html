@@ -766,7 +766,7 @@ function drawGame(){
 
   // individual chasers (red dots with trail)
   for(var i=centi.length-1;i>=0;i--){
-    var c=centi[i], s=c.segments[0]; if(!c||!s) continue;
+    var c=centi[i]; if(!c) continue; var s=c.segments[0]; if(!s) continue;
     ctx.fillStyle="#c44";ctx.fillRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h);
   }
 
