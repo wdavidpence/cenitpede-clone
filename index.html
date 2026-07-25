@@ -94,6 +94,9 @@ var FLEA_MAX = 2;
 var SCORPION_SPAWN_INTERVAL = 1200; // frames (~19.2s at 60fps)
 var SCORPION_SPEED = 1.8;
 var SCORPION_SCORE = 500;
+// --- lower third of playfield: upper bound of the mushroom-free player zone ---
+var PLAYER_ZONE_TOP = Math.floor(H * 2/3);
+
 var score   = 0;
 var lives   = 3;
 var wave    = 1;
@@ -316,7 +319,7 @@ function startGame(){
   initAudio();
   running = true;
   gameOver = false;
-  player.x=160; player.y=H-24; player.invT=0;
+  player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); player.invT=0;
   bullets=[]; mush=[]; centi=[]; fleas=[]; spiders=[]; scorpions=[];
   fxPars=[];
   score=0; lives=3; wave=1; spiderSpawnTimer=0; fleaSpawnTimer=0; scorpionSpawnTimer=0; lastShotTime=0;
@@ -426,7 +429,7 @@ function update(dt){
   // player movement + invincibility timer
   if(keys.ArrowLeft||keys.KeyA) player.x=Math.max(2,player.x-3);
   if(keys.ArrowRight||keys.KeyD) player.x=Math.min(W-2,player.x+3);
-  if(keys.ArrowUp||keys.KeyW){player.y=Math.max(8,player.y-3);}
+  if(keys.ArrowUp||keys.KeyW){player.y=Math.max(PLAYER_ZONE_TOP,player.y-3);}
   if(keys.ArrowDown||keys.KeyS){player.y=Math.min(H-player.h/2,player.y+3);}
   if(player.invT > 0){ player.invT -= 16; }
   updateFlash();
@@ -571,7 +574,7 @@ function update(dt){
       if(rectHit(player,head) && player.invT<=0){
         playSfx("player_damage");
         lives--; updateHUD(); triggerFlash("#f44");
-        if(lives>0){ player.invT=1200; player.x=160; player.y=H-24; } else { player.invT = 2000; showGameOver(); return; }
+        if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); } else { player.invT = 2000; showGameOver(); return; }
       }
     }
 
@@ -606,7 +609,7 @@ function update(dt){
     // player hits spider -> lose life (respawn when lives remain, game over otherwise)
      if(rectHit(player,sp) && player.invT<=0){
        lives--; updateHUD(); triggerFlash("#f44");
-       if(lives>0){ player.invT=1200; player.x=160; player.y=H-24; } else { showGameOver(); return; }
+       if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); } else { showGameOver(); return; }
      }
 
      // cleanup off-screen
@@ -660,7 +663,7 @@ function update(dt){
     // player hits flea -> lose life (respawn when lives remain)
     if(rectHit(player,fl) && player.invT<=0){
       lives--; updateHUD(); triggerFlash("#f44");
-      if(lives>0){ player.invT=1200; player.x=160; player.y=H-24; } else { showGameOver(); return; }
+      if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); } else { showGameOver(); return; }
     }
     // cleanup off-screen (bottom)
     if(fl.y > H+16) fleas.splice(fi,1);
@@ -698,7 +701,7 @@ function update(dt){
     // player hits scorpion -> lose life (respawn when lives remain)
     if(rectHit(player,sc) && player.invT<=0){
       lives--; updateHUD(); triggerFlash("#f44");
-      if(lives>0){ player.invT=1200; player.x=160; player.y=H-24; } else { showGameOver(); return; }
+      if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); } else { showGameOver(); return; }
     }
     // cleanup off-screen
     if(sc.x < -30 || sc.x > W+30) scorpions.splice(sci,1);
