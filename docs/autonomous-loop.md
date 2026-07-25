@@ -81,3 +81,44 @@ bash -c 'terminal(background=true); bash supervisor.sh' &
 
 The script will read whatever is in `STATE.json` and advance from there.  No
 state migration or "catch-up" procedure is needed.
+
+## Scorecard — Infrastructure Slice Verification
+
+After every infrastructure pass (scorecard, syntax/runtime checks, commits), run:
+
+```bash
+node scorecard.js
+```
+
+This emits a single JSON object to stdout containing:
+- **`timestamp`** — ISO 8601 UTC time of the check.
+- **`syntaxCheck.ok` / `syntaxCheck.error`** — whether the inline `<script>` body in
+  `index.html` parses cleanly via `new Function()`. The error string is populated on
+  failure (e.g. syntax errors, undefined references).
+- **`smokeTest.ok` / `smokeTest.output`** — result of running `node tests/smoke.mjs`;
+  `ok` is `true` only when stdout equals exactly `PASS`.
+- **`gameplayMarkers`** — per-feature presence report for the required markers:
+  `startGame`, `fireBullet`, `centipede`, `mushrooms`, `spiders`, `fleas`,
+  `scorpions`, `WebAudio`, `touch`. Each entry is `true` if any identifier-like
+  token in the inline script (case-insensitive) matches the marker; `false`
+  otherwise.
+- **`unavailableBrowserChecks`** — list of checks that cannot be validated from Node
+  and require a real browser runtime (rendering, touch events, audio playback,
+  frame-rate, viewport scaling, safe-area padding, multi-touch gestures, orientation).
+
+The scorecard is dependency-free (uses only `fs`, `vm`, `path` Node builtins), runs
+headlessly from the repository root with no external dependencies or build step.
+
+Example output shape:
+
+```json
+{
+  "timestamp": "2026-07-25T14:55:00Z",
+  "syntaxCheck": { "ok": true, "error": "" },
+  "smokeTest":       { "ok": true,  "output": "PASS\n" },
+  "gameplayMarkers": { "startGame":true, ... , "WebAudio":false, "touch":true },
+  "unavailableBrowserChecks": [ { "check":"canvas rendering verification", ... } ]
+}
+```
+
+Verify the output is well-formed before committing: `node scorecard.js | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8")); console.log("OK")'`.
