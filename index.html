@@ -80,6 +80,10 @@ var spiderSpawnTimer = 0;
 var fleaSpawnTimer = 0;
 var scorpionSpawnTimer = 0;
 var SPIDER_SPAWN_INTERVAL = 600; // frames (~9.6s at 60fps)
+
+// --- shot cooldown state (authentic Centipede: one shot, then wait before next) ---
+var SHOT_COOLDOWN = 350;    // ms between shots for balance
+var lastShotTime=0;         // timestamp of last fireBullet() call
 var SPIDER_HUNT_RANGE = 150;
 var SPIDER_SPEED = 2.2;
 var SPIDER_SCORE = 75;
@@ -360,46 +364,30 @@ function spawnWaveCenti(){
   centiSpawned++;
 }
 
-// --- grid-aligned mushroom placement (stable, no falling) ---
-function spawnMush(){
-  // fill grid slots that are empty; mushrooms stay in place
-  for(var r=0;r<MUSH_ROWS;r++){
-    for(var c2=0;c2<MUSH_COLS;c2++){
-      var occupied = false;
-      for(var i=0;i<mush.length;i++){
-        if(mush[i].gR===r && mush[i].gC===c2){occupied=true;break;}
-      }
-      if(!occupied){
-        mush.push({
-          x: MUSH_OFF_X + c2*MUSH_CW,
-          y: MUSH_OFF_Y + r*MUSH_CH,
-          w: 18, h: 14, stemH: 0,
-          gR: r, gC: c2,       // grid row/col for stable placement
-          poisoned: false,      // bullet damage state
-          pTimer: 0             // poison decay timer (ms)
-        });
-        return;                // one mushroom per frame max
-      }
-    }
-  }
-}
+// --- row-splitting constants for mushroom destruction ---
+var SMALL_MUSH_W = 12, SMALL_MUSH_H = 8, SMALL_SPAWN_INTERVAL = 40;
 
-// --- apply poison to centipede segments near a poisoned mushroom ---
+// --- spawn one centipede wave (all segments at once) ---
+
+// --- apply poison to centipede segments near poisoned mushrooms ---
 function tickPoison(dt){
   for(var i=mush.length-1;i>=0;i--){
     var m=mush[i]; if(!m.poisoned) continue;
+    // small mushrooms have shorter poison life and less damage range
+    var poisonLife = m.small ? POISON_LIFE/4 : POISON_LIFE;
     m.pTimer += dt;
-    if(m.pTimer >= POISON_LIFE){ m.poisoned=false; m.pTimer=0; }
-    // damage every centipede segment within 2 cells of the mushroom
+    if(m.pTimer >= poisonLife){ m.poisoned=false; m.pTimer=0; }
+    // damage every centipede segment within proximity of the mushroom
     for(var j=centi.length-1;j>=0;j--){
       var c=centi[j]; if(!c||!c.segments[0]) continue;
       for(var k=c.segments.length-1;k>=0;k--){
         var s=c.segments[k];
         var dx=s.x-m.x, dy=s.y-m.y;
-        if(Math.abs(dx)<MUSH_CW*2 && Math.abs(dy)<MUSH_CH*2){
-          // apply damage: shrink segment size proportionally
-          s.w = Math.max(4, s.w - POISON_DMG);
-          s.h = Math.max(3, s.h - POISON_DMG/2);
+        // small range: 1 cell for regular, half-cell for small mushrooms
+        var range = m.small ? MUSH_CW : MUSH_CW*2;
+        if(Math.abs(dx)<range && Math.abs(dy) < (m.small ? MUSH_CH/3 : MUSH_CH)){
+          s.w = Math.max(4, s.w - (m.small?1:POISON_DMG));
+          s.h = Math.max(3, s.h - (m.small?0.5:POISON_DMG/2));
         }
       }
     }
@@ -440,17 +428,42 @@ function update(dt){
   spawnMush();
   for(var i=mush.length-1;i>=0;i--){
     var m=mush[i];
-    // bullet hits mushroom → apply poison state (no destruction)
+    // bullet hits mushroom → destroy + spawn two smaller replacements in same row (staggered)
     for(var j=bullets.length-1;j>=0;j--){
       var b=bullets[j]; if(rectHit(b,m)){
-        bullets.splice(j,1); score+=5; playSfx("mushroom_hit"); updateHUD();
-        m.poisoned = true; m.pTimer = 0;   // poison the mushroom
-        break;
+        bullets.splice(j,1); score+=5; playSfx("mushroom_hit"); updateHUD(); triggerFlash("#fff"); spawnBurst(m.x,m.y,"#ff9",8);
+        // remove current large mushroom from mush array (splice by index i)
+        mush.splice(i,1);
+        var rowY = MUSH_OFF_Y + m.gR * MUSH_CH;
+        var midC = m.gC;
+        for(var sc=0;sc<2;sc++){
+          // find free slot in same row at column midC+sc (or nearest free)
+          var slotFree=true;
+          for(var oi=0;oi<mush.length;oi++){
+            if(mush[oi].gR===m.gR&&Math.abs(mush[oi].gC-midC-sc)<=1){slotFree=false;break}
+          }
+          // fallback: use adjacent column with offset
+          var finalCol = midC + sc;
+          var occ=false; for(var oi2=0;oi2<mush.length;oi2++){if(mush[oi2].gR===m.gR&&mush[oi2].gC===finalCol){occ=true;break}}
+          if(!occ){
+            mush.push({x:MUSH_OFF_X+finalCol*MUSH_CW,y:rowY,w:SMALL_MUSH_W,h:SMALL_MUSH_H,stemH:0,gR:m.gR,gC:finalCol,poisoned:false,pTimer:0,small:true});
+          } else {
+            // slot taken: try next free column in same row
+            for(var fc=1;fc<MUSH_COLS;fc++){
+          var testCol = (midC+sc+fc)%(MUSH_COLS);
+          var occ2=false; for(var oi3=0;oi3<mush.length;oi3++){if(mush[oi3].gR===m.gR&&mush[oi3].gC===testCol){occ2=true;break}}
+              if(!occ2){
+                mush.push({x:MUSH_OFF_X+testCol*MUSH_CW,y:rowY,w:SMALL_MUSH_W,h:SMALL_MUSH_H,stemH:0,gR:m.gR,gC:testCol,poisoned:false,pTimer:0,small:true});
+                break;
+              }
+            }
+          }
+        }
+        break; // one bullet hit per mushroom iteration max
       }
     }
     // player hits mushroom → safe: no life loss, just push player back
     if(rectHit(player,m)){
-      // nudge player away from mushroom (safe collision)
       var dx=player.x-m.x, dy=player.y-m.y;
       if(Math.abs(dx)>Math.abs(dy)) player.x += (dx>0?4:-4); else player.y += (dy>0?4:-4);
     }
@@ -708,11 +721,10 @@ function drawGame(){
 
   // mushrooms (grid-aligned, poisoned ones glow purple)
   for(var m of mush){
-    var baseColor = m.poisoned ? "#83a" : "#6B2";
-    ctx.fillStyle=baseColor; ctx.fillRect(m.x-m.w/2,m.y-4,m.w,m.h);
-    ctx.fillStyle=m.poisoned?"#619":"#3a0";
-    var cy=m.y-2;
-    ctx.beginPath();ctx.arc(m.x,cy,m.w/2,Math.PI,true);ctx.fill()
+    var baseFill=m.small?(m.poisoned?"#48b":"#377"):m.poisoned?"#83a":"#6B2";
+    var stemFill=m.small?(m.poisoned?"#409":"#377"):(m.poisoned?"#619":"#3a0");
+    ctx.fillStyle=baseFill; ctx.fillRect(m.x-m.w/2,m.y-4,m.w,m.h);
+    ctx.fillStyle=stemFill;var cy=m.y-2;ctx.beginPath();ctx.arc(m.x,cy,m.w/2,Math.PI,true);ctx.fill()
   }
 
   // centipedes — red segmented bodies
