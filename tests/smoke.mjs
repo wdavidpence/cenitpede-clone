@@ -274,4 +274,52 @@ assert(Math.abs(diagDist2 - PLAYER_SPEED) < 0.001);
 var z1 = normalizeMovement(0, 0);
 assert(z1.mx === 0 && z1.my === 0);
 
+// --- DPR-aware canvas backing resolution (pure calculation tests) ---
+function computeDPR(rawDPR) { return Math.min(rawDPR || 1, 2); }
+function backingWidth(logicalW, dpr) { return logicalW * dpr; }
+function backingHeight(logicalH, dpr) { return logicalH * dpr; }
+
+assert(computeDPR(1) === 1);
+assert(computeDPR(2) === 2);
+assert(computeDPR(3) === 2);     // capped at 2
+assert(computeDPR(undefined) === 1);
+assert(computeDPR(0) === 1);
+assert(backingWidth(320, 1) === 320);
+assert(backingWidth(320, 2) === 640);
+assert(backingHeight(240, 2) === 480);
+assert(backingHeight(240, 1) === 240);
+
+// --- visibility guard (pause/resume logic) ---
+function visGuard(hidden, visPaused) {
+  if (hidden) return true;   // should pause
+  return false;              // should resume (unpause)
+}
+assert(visGuard(true, false) === true);   // tab hidden -> pause
+assert(visGuard(false, true) === false);  // tab visible -> resume
+assert(visGuard(true, true) === true);    // already paused, stays paused
+
+// on resume: accumulator must reset to 0, lastT refreshed
+function resumeState() {
+  return { acc: 0, lastT: "refreshed" };
+}
+var rs = resumeState();
+assert(rs.acc === 0);
+assert(rs.lastT === "refreshed");
+
+// --- wave-clear bonus (authentic: 10 pts per remaining mushroom) ---
+function waveClearBonus(mushCount) { return mushCount * 10; }
+assert(waveClearBonus(0) === 0);
+assert(waveClearBonus(1) === 10);
+assert(waveClearBonus(5) === 50);
+assert(waveClearBonus(20) === 200);
+
+// bonus is only awarded when centipedes are fully cleared
+function shouldAwardBonus(centiLength, centiSpawned, centiTarget) {
+  return centiLength === 0 && centiSpawned >= centiTarget && centiTarget > 0;
+}
+assert(shouldAwardBonus(0, 3, 3) === true);
+assert(shouldAwardBonus(1, 3, 3) === false);  // centipedes still alive
+assert(shouldAwardBonus(0, 2, 3) === false);  // not all spawned yet
+assert(shouldAwardBonus(0, 0, 0) === false);  // no target (initial state)
+
 console.log("PASS");

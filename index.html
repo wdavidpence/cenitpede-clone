@@ -61,8 +61,11 @@ canvas{display:block;background:#1a4927}
 var canvas = document.getElementById("cvs");
 var ctx = canvas.getContext("2d");
 var W = 320, H = 240, DPR = Math.min(window.devicePixelRatio || 1, 2);
-canvas.style.width = W + "px";
+canvas.width  = W * DPR;
+canvas.height = H * DPR;
+canvas.style.width  = W + "px";
 canvas.style.height = H + "px";
+ctx.scale(DPR, DPR);
 
 // --- refs ---
 var hudSc   = document.getElementById("sc");
@@ -668,15 +671,26 @@ function spawnMush(){
 }
 
 // --- fixed-timestep loop ---
-var lastT=performance.now(), acc=0, TARGET=16;
+var lastT=performance.now(), acc=0, TARGET=16, visPaused=false;
 function loop(){
   requestAnimationFrame(loop);
+  if(visPaused) return;
   if(!running){drawAttract();return;}
   var now=performance.now(); acc+=now-lastT; lastT=now;
   while(acc>TARGET){update(TARGET); acc-=TARGET;}
   drawGame();
 }
 loop();
+// --- pause/resume on document visibility changes (prevents runaway loop when tab hidden) ---
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden){
+    visPaused = true;
+  } else {
+    visPaused = false;
+    lastT = performance.now();
+    acc = 0;
+  }
+});
 // --- update ---
 function update(dt){
   // player movement + invincibility timer (diagonal-normalized)
@@ -982,6 +996,9 @@ function update(dt){
 
   // wave completion: all centipede segments destroyed and spawn queue empty
   if(centi.length === 0 && centiSpawned >= centiTarget && centiTarget > 0){
+    // wave-clear bonus: authentic Centipede awards 10 pts per remaining mushroom
+    var waveBonus = mush.length * 10;
+    if(waveBonus > 0){ score += waveBonus; spawnPopup(W/2, H/2, "WAVE BONUS +" + waveBonus, "#0ff"); }
     playSfx("wave_transition");
     startNextWave();
   }
