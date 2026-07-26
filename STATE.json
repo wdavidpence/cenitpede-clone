@@ -16,7 +16,7 @@
     "status": "pass",
     "details": "Scorecard: syntax OK, smoke PASS, all 9 gameplay markers present. Syntax check: inline JS compiles without error. Diff audit: spawn/update/render/collision/cleanup/scoring/game-state paths verified."
   },
-  "last_commit": null,
+  "last_commit": "489a7a6",
   "next_action": "Phase 3 polish: add wave-transition audio variation per wave number, tune centipede speed scaling for early waves, and verify angled bullet visual alignment in browser. Then harden Phase 4 touch controls for edge-case swipe-off scenarios.",
   "pass_count": 1,
   "judge_review_due": false
