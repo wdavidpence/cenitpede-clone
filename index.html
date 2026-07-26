@@ -374,35 +374,16 @@ function rectHit(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a
   var keySet = ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD"];
   document.addEventListener("keydown",function(e){if(keySet.indexOf(e.key)>=0){e.preventDefault();keys[e.key]=true;}});
   document.addEventListener("keyup",function(e){if(keySet.indexOf(e.key)>=0){keys[e.key]=false;}});
-})();
+})();window.addEventListener("blur",function(){for(var k in keys)delete keys[k];});
 
 // --- input: virtual joystick (left thumb) for left/right movement + fire button ---
-(function(){
-  var jsArea = document.querySelector(".joystickArea"); if(!jsArea) return;
-  var jsThumb = document.querySelector(".joystickThumb"); if(!jsThumb) return;
-  var jsCenterX, jsCenterY, jsDragging=false;
-  function onEnd(){keys.ArrowLeft=false;keys.ArrowRight=false; jsDragging=false; jsArea.style.background="rgba(20,30,60,.35)"; jsThumb.style.transform="translate(-50%,-50%)";jsThumb.style.boxShadow="none";}
-  function onMove(ev){ev.preventDefault();var t=ev.touches[0]||ev.changedTouches[0]; if(!t)return;if(!jsDragging)return;var r=jsArea.getBoundingClientRect(); var cx=t.clientX-r.left, cy=t.clientY-r.top; var dx=cx-jsCenterX, dy=cy-jsCenterY;if(Math.abs(dx)<2&&Math.abs(dy)<2) return;keys.ArrowLeft=(dx<0);keys.ArrowRight=(dx>0);var tx=Math.max(-48,Math.min(48,dx)), ty=Math.max(-48,Math.min(48,dy));jsThumb.style.transform="translate("+tx+"px,"+ty+"px)";jsThumb.style.boxShadow="inset 0 0 0 "+(+dx<0?-dx:+dx)+"px rgba(255,107,109,.6)";}
-  var touchStartHandler=function(e){e.preventDefault();jsDragging=true;var t=e.touches[0]; var r=jsArea.getBoundingClientRect(); jsCenterX=t.clientX-r.left;jsCenterY=t.clientY-r.top;};
-  jsArea.addEventListener("touchstart",touchStartHandler);
-  jsThumb.addEventListener("touchmove",onMove);
-  jsArea.addEventListener("touchmove",onMove);
-  jsArea.addEventListener("touchend",function(e){e.preventDefault();e.stopPropagation();onEnd();});
-  jsArea.addEventListener("touchcancel",onEnd);
-})()
+(function(){var jsArea=document.querySelector(".joystickArea"),jsThumb=document.querySelector(".joystickThumb");if(!jsArea||!jsThumb)return;var jsDragging=false,activeTouchID=null;function onEnd(){keys.ArrowLeft=false;keys.ArrowRight=false;jsDragging=false;jsArea.style.background="rgba(20,30,60,.35)";jsThumb.style.transform="translate(-50%,-50%)";jsThumb.style.boxShadow="none";}function onMove(ev){ev.preventDefault();var t=ev.changedTouches[0]||null;if(!t||t.identifier!==activeTouchID)return;var r=jsArea.getBoundingClientRect(),cx=t.clientX-r.left, cy=t.clientY-r.top, dx=cx-(r.width/2), dy=cy-(r.height/2);if(Math.abs(dx)<2&&Math.abs(dy)<2)return;keys.ArrowLeft=(dx<0);keys.ArrowRight=(dx>0);var tx=Math.max(-48,Math.min(48,dx)),ty=Math.max(-48,Math.min(48,dy));jsThumb.style.transform="translate("+tx+"px,"+ty+"px)";jsThumb.style.boxShadow="inset 0 0 0 "+(+dx<0?-dx:+dx)+"px rgba(255,107,109,.6)";}var touchStartHandler=function(e){e.preventDefault();var t=e.touches[0];activeTouchID=t.identifier;jsDragging=true;};jsArea.addEventListener("touchstart",touchStartHandler);jsArea.addEventListener("touchmove",function(e){e.preventDefault();onMove(e);});jsArea.addEventListener("touchend",function(e){if(!e.changedTouches[0]||e.changedTouches[0].identifier!==activeTouchID)return;activeTouchID=null;onEnd();});jsArea.addEventListener("touchcancel",function(){activeTouchID=null;onEnd();});})();
 
-// --- input: FIRE button + keyboard Z/Space ---
-(function(){
-  fbBtn.addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation();fireBullet();});
-  fbBtn.addEventListener("click",function(){fireBullet();});
-  document.addEventListener("keydown",function(e){if(e.key==="z"||e.key==="Z"||e.key===" "){e.preventDefault();fireBullet();}});
-})();
+// --- input: FIRE button + keyboard Z/Space (touchstart fires once, click suppressed 500ms then allowed) ---
+(function(){var fbLast=0;fbBtn.addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation();if(!running||performance.now()-lastShotTime<SHOT_COOLDOWN)return;fireBullet();}); fbBtn.addEventListener("click",function(){if(!running||performance.now()-lastShotTime<SHOT_COOLDOWN)return;if(performance.now()-fbLast<500)return;fireBullet();fbLast=performance.now();}); document.addEventListener("keydown",function(e){if(e.key==="z"||e.key==="Z"||e.key===" "){e.preventDefault();fireBullet();}});})();
 
-// --- overlay: tap to start/restart ---
-(function(){
-  ovrEl.addEventListener("touchstart",function(e){e.preventDefault();startGame();});
-  ovrEl.addEventListener("mousedown",function(){startGame();});
-})();
+// --- overlay: tap to start/restart — allow when not running, skip if already running ---
+(function(){ovrEl.addEventListener("click",function(e){if(running) return;if(!running) startGame();});})();
 
 // --- shoot (regular or poisoned based on nearby mushrooms) ---
 function fireBullet(){
@@ -685,16 +666,8 @@ function loop(){
   drawGame();
 }
 loop();
-// --- pause/resume on document visibility changes (prevents runaway loop when tab hidden) ---
-document.addEventListener("visibilitychange", function(){
-  if(document.hidden){
-    visPaused = true;
-  } else {
-    visPaused = false;
-    lastT = performance.now();
-    acc = 0;
-  }
-});
+// --- pause/resume on document visibility changes (clears stale input+audio state) ---
+(function(){document.addEventListener("visibilitychange",function(){if(document.hidden){visPaused=true;Object.keys(keys).forEach(function(k){keys[k]=false;});}else{visPaused=false;lastT=performance.now();acc=0;}});})();
 // --- update ---
 function update(dt){
   // player movement + invincibility timer (diagonal-normalized)
@@ -1089,8 +1062,8 @@ function updateHUD(){
   hudWg.style.color="#fff";hudWg.style.textShadow="0 0 4px rgba(100,200,255,.6)";hudWg.textContent=wave;
   document.getElementById("hs").style.color="#ff9";document.getElementById("hs").textContent=highScore;
 }
-
-
+// --- window blur: reset keyboard state after tab switch (BUG-010) ---
+(function(){document.addEventListener("blur",function(){Object.keys(keys).forEach(function(k){keys[k]=false;});});})();
 })(); // IIFE ends
 </script>
 </div>
