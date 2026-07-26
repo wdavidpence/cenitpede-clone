@@ -8,10 +8,10 @@
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;background:#111;color:#eee;font-family:monospace}
 body{overflow:hidden;-webkit-tap-highlight-color:transparent}
-#wr{position:relative;width:100vw;height:100dvh;display:flex;flex-direction:column;background:#000}
+#wr{position:relative;width:100vw;height:100dvh;display:flex;flex-direction:column;background:#000;padding-bottom:env(safe-area-inset-bottom,0px)}
 canvas{display:block;background:#1a4927}
-#hud{padding:8px calc(8px+env(safe-area-inset-right)) 60px;background:rgba(0,0,0,.5);display:flex;justify-content:space-between;font-size:13px;z-index:3}
-#touch{position:absolute;left:4px;top:50%;transform:translateY(-50%);z-index:3;display:none}
+#hud{padding:calc(8px+env(safe-area-inset-top,0px)) calc(8px+env(safe-area-inset-right,0px)) 60px calc(8px+env(safe-area-inset-left,0px));background:rgba(0,0,0,.5);display:flex;justify-content:space-between;font-size:13px;z-index:3}
+#touch{position:absolute;left:calc(4px+env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);z-index:3;display:none}
 @media(hover:hover){#touch{display:none!important}}
 .dpad{width:180px;height:172px;position:relative}
 .btn{position:absolute;background:#3a6;border:2px solid #579;color:#eee;font-size:24px;display:flex;align-items:center;justify-content:center;border-radius:8px;padding:6px 8px;user-select:none;-webkit-user-select:none;touch-action:none;cursor:pointer}
@@ -339,9 +339,29 @@ function playSfx(name){
   }catch(e){}
 }
 
+// --- orientation lock (portrait-primary, graceful fallback) ---
+function lockPortrait(){
+  try{
+    if(screen.orientation && screen.orientation.lock){
+      screen.orientation.lock("portrait-primary").catch(function(){});
+    }
+  }catch(e){}
+}
+
+// --- fullscreen request (iOS Safari needs user-gesture context) ---
+function requestFullscreen(){
+  try{
+    var el=document.documentElement;
+    var r=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(r) r.call(el);
+  }catch(e){}
+}
+
 // --- start / restart game ---
 function startGame(){
   initAudio();
+  lockPortrait();
+  requestFullscreen();
   running = true;
   gameOver = false;
   player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); player.invT=0;
@@ -447,11 +467,17 @@ function loop(){
 loop();
 // --- update ---
 function update(dt){
-  // player movement + invincibility timer
-  if(keys.ArrowLeft||keys.KeyA) player.x=Math.max(2,player.x-4);
-  if(keys.ArrowRight||keys.KeyD) player.x=Math.min(W-2,player.x+4);
-  if(keys.ArrowUp||keys.KeyW){player.y=Math.max(PLAYER_ZONE_TOP,player.y-4);}
-  if(keys.ArrowDown||keys.KeyS){player.y=Math.min(H-8,player.y+4);}
+  // player movement + invincibility timer (diagonal-normalized)
+  var mx=0, my=0;
+  if(keys.ArrowLeft||keys.KeyA)  mx-=1;
+  if(keys.ArrowRight||keys.KeyD) mx+=1;
+  if(keys.ArrowUp||keys.KeyW)    my-=1;
+  if(keys.ArrowDown||keys.KeyS)  my+=1;
+  var mLen=Math.sqrt(mx*mx+my*my);
+  if(mLen>1){mx/=mLen;my/=mLen;}
+  var spd=4;
+  player.x=Math.max(2,Math.min(W-2,player.x+mx*spd));
+  player.y=Math.max(PLAYER_ZONE_TOP,Math.min(H-8,player.y+my*spd));
   if(player.invT > 0){ player.invT -= 16; }
   updateFlash();
 

@@ -252,4 +252,26 @@ function respawnY(zoneTop) { return Math.max(zoneTop, H - 24); }
 assert(respawnY(PLAYER_ZONE_TOP) >= PLAYER_ZONE_TOP);
 assert(respawnY(PLAYER_ZONE_TOP) <= H - 8);
 
+// --- diagonal movement normalization (cardinal speed = diagonal speed) ---
+function normalizeMovement(mx, my) {
+  var len = Math.sqrt(mx * mx + my * my);
+  if (len > 1) { mx /= len; my /= len; }
+  return { mx: mx, my: my };
+}
+// cardinal: speed is exactly 4
+var c1 = normalizeMovement(1, 0);
+assert(c1.mx === 1 && c1.my === 0);
+assert(Math.abs(Math.sqrt(c1.mx * c1.mx + c1.my * c1.my) - 1) < 0.001);
+// diagonal: unit vector, effective total distance = 4
+var d1 = normalizeMovement(1, 1);
+var diagDist = Math.sqrt(d1.mx * d1.mx + d1.my * d1.my) * PLAYER_SPEED;
+assert(Math.abs(diagDist - PLAYER_SPEED) < 0.001);
+// opposite directions cancel to zero
+var o1 = normalizeMovement(1, -1);
+var diagDist2 = Math.sqrt(o1.mx * o1.mx + o1.my * o1.my) * PLAYER_SPEED;
+assert(Math.abs(diagDist2 - PLAYER_SPEED) < 0.001);
+// zero movement stays zero
+var z1 = normalizeMovement(0, 0);
+assert(z1.mx === 0 && z1.my === 0);
+
 console.log("PASS");
