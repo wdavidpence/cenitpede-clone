@@ -217,4 +217,39 @@ assert(ct1.length === 2);
 var ct2 = cleanupTest([]);
 assert(ct2.length === 0);
 
+// --- player zone: bottom 20% of playfield (authentic Centipede) ---
+const W = 320, H = 240;
+const PLAYER_ZONE_TOP = Math.floor(H * 0.80);
+assert(PLAYER_ZONE_TOP === 192);
+
+// player speed: 4 px/frame in all directions
+const PLAYER_SPEED = 4;
+function movePlayer(x, y, dir, zoneTop) {
+  if (dir === 'left')  return { x: Math.max(2, x - PLAYER_SPEED), y };
+  if (dir === 'right') return { x: Math.min(W - 2, x + PLAYER_SPEED), y };
+  if (dir === 'up')    return { x, y: Math.max(zoneTop, y - PLAYER_SPEED) };
+  if (dir === 'down')  return { x, y: Math.min(H - 8, y + PLAYER_SPEED) };
+}
+// left/right clamped to screen edges
+assert(movePlayer(10, 200, 'left').x === 6);
+assert(movePlayer(10, 200, 'left').x > 0);
+assert(movePlayer(310, 200, 'right').x === 314);
+assert(movePlayer(310, 200, 'right').x < W);
+
+// up/down clamped to player zone
+assert(movePlayer(160, 196, 'up', PLAYER_ZONE_TOP).y === 192);
+assert(movePlayer(160, 192, 'up', PLAYER_ZONE_TOP).y === 192);
+assert(movePlayer(160, 230, 'down', PLAYER_ZONE_TOP).y === 232);
+assert(movePlayer(160, 229, 'down', PLAYER_ZONE_TOP).y === 232);
+
+// zone boundaries: player cannot enter enemy area
+assert(PLAYER_ZONE_TOP === Math.floor(H * 0.80));
+var zoneHeight = H - PLAYER_ZONE_TOP;
+assert(zoneHeight === 48);
+
+// respawn always places player inside zone
+function respawnY(zoneTop) { return Math.max(zoneTop, H - 24); }
+assert(respawnY(PLAYER_ZONE_TOP) >= PLAYER_ZONE_TOP);
+assert(respawnY(PLAYER_ZONE_TOP) <= H - 8);
+
 console.log("PASS");

@@ -94,7 +94,7 @@ var SCORPION_SPAWN_INTERVAL = 1200; // frames (~19.2s at 60fps)
 var SCORPION_SPEED = 1.8;
 var SCORPION_SCORE = 1000;
 // --- lower third of playfield: upper bound of the mushroom-free player zone ---
-var PLAYER_ZONE_TOP = Math.floor(H * 2/3);
+var PLAYER_ZONE_TOP = Math.floor(H * 0.80); // bottom 20% player zone (authentic Centipede)
 
 var score   = 0;
 var lives   = 3;
@@ -448,10 +448,10 @@ loop();
 // --- update ---
 function update(dt){
   // player movement + invincibility timer
-  if(keys.ArrowLeft||keys.KeyA) player.x=Math.max(2,player.x-3);
-  if(keys.ArrowRight||keys.KeyD) player.x=Math.min(W-2,player.x+3);
-  if(keys.ArrowUp||keys.KeyW){player.y=Math.max(PLAYER_ZONE_TOP,player.y-3);}
-  if(keys.ArrowDown||keys.KeyS){player.y=Math.min(H-player.h/2,player.y+3);}
+  if(keys.ArrowLeft||keys.KeyA) player.x=Math.max(2,player.x-4);
+  if(keys.ArrowRight||keys.KeyD) player.x=Math.min(W-2,player.x+4);
+  if(keys.ArrowUp||keys.KeyW){player.y=Math.max(PLAYER_ZONE_TOP,player.y-4);}
+  if(keys.ArrowDown||keys.KeyS){player.y=Math.min(H-8,player.y+4);}
   if(player.invT > 0){ player.invT -= 16; }
   updateFlash();
 
