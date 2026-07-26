@@ -57,7 +57,16 @@ try {
 function scanMarkers(src, markers) {
   const out = {};
   for (const m of markers) {
-    if (m === 'audioWebAudio') {
+    if (m === 'touch') {
+      // touch: positive when inline source contains at least one of the touch event
+      // tokens (touchstart / touchmove / touchend / touchcancel) AND references a
+      // touch control element — here we look for 'joystickArea' or '.fireBtn', or
+      // any element bound to a touch handler.
+      const lowerSrc = src.toLowerCase();
+      const hasTouchEventToken = /(touch(?:start|move|end|cancel)\b)/i.test(src);
+      const hasTouchControl    = /joystickarea|\.firebtn|joystickthumb/.test(lowerSrc) || /touch(?:start|move|end|cancel)\s*[=(]/.test(lowerSrc);
+      out[m] = hasTouchEventToken && hasTouchControl;
+    } else if (m === 'audioWebAudio') {
       // audioWebAudio is an output label; positive when the inline source
       // contains either 'AudioContext' or 'webkitAudioContext'.
       const tokens   = src.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || [];
