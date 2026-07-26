@@ -18,7 +18,7 @@
     "status": "pass",
     "details": "Scorecard: syntax OK, smoke PASS (39 assertions), all 9 gameplay markers present. Syntax check: inline JS compiles without error. git diff --check: clean. Smoke tests: DPR, visibility guard, wave-clear bonus, split mechanic, cleanup, diagonal normalization, mushroom HP/nibble, spider/flea/scorpion scoring, extra life — all pass."
   },
-  "last_commit": "d13c2b2",
+  "last_commit": "fb49d87",
   "next_action": "Remaining items for 100: (1) Tests use extracted reimplementations not actual game code — risk of logic drift; consider integration tests that exercise real game functions. (2) Real-device verification needed for: DPR rendering on Retina, visibility API pause/resume on iOS Safari backgrounding, touch-start flow, fullscreen API, safe-area-inset padding, orientation lock. (3) Optional: devicePixelRatio change listener for window drag between monitors.",
   "pass_count": 9,
   "judge_review_due": false,
