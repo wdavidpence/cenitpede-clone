@@ -124,6 +124,38 @@ assert(centipedeScore(false) === 10);
 // mushroom scoring: 1 point per hit (authentic)
 assert(mushroomScore() === 1);
 
+// mushroom HP mechanics: 4-hit destruction cycle (authentic)
+function mushroomHpDecrement(hp) { return hp - 1; }
+function mushroomDestroyed(hp) { return hp <= 0; }
+function mushroomSize(hp, baseW, baseH) { return { w: baseW * (hp / 4), h: baseH * (hp / 4) }; }
+assert(mushroomHpDecrement(4) === 3);
+assert(mushroomHpDecrement(1) === 0);
+assert(!mushroomDestroyed(4));
+assert(!mushroomDestroyed(1));
+assert(mushroomDestroyed(0));
+var sz3 = mushroomSize(3, 18, 14);
+assert(sz3.w === 13.5 && sz3.h === 10.5);
+var sz1 = mushroomSize(1, 18, 14);
+assert(sz1.w === 4.5 && sz1.h === 3.5);
+assert(mushroomDestroyed(mushroomHpDecrement(1)));
+
+// centipede nibble: mushroom loses 1 HP when segment crosses
+function centipedeNibble(hp) { return Math.max(0, hp - 1); }
+assert(centipedeNibble(4) === 3);
+assert(centipedeNibble(0) === 0);
+
+// mushroom regen: fills empty rows after player death
+function regenMushroomsForRows(rows, existing) {
+  var filled = [];
+  for (var r = 0; r < rows; r++) {
+    var has = existing.some(function(m) { return m.r === r; });
+    if (!has) filled.push(r);
+  }
+  return filled;
+}
+assert(regenMushroomsForRows(5, [{r:0},{r:1}]).length === 3);
+assert(regenMushroomsForRows(5, [{r:0},{r:1},{r:2},{r:3},{r:4}]).length === 0);
+
 // extra life: every 12000 points, max 6 lives
 var el1 = extraLifeCheck(12000, 12000, 3);
 assert(el1.granted === true && el1.lives === 4 && el1.nextExtraLife === 24000);

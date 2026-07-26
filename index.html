@@ -189,6 +189,27 @@ var POISON_DMG = 3;       // damage per tick to centipede segments
 var POISON_TICK = 500;    // ms between poison ticks
 var POISON_LIFE = 4000;   // ms a poisoned mushroom stays active
 
+// --- mushroom regen after player death (authentic: one per empty row) ---
+function regenMushrooms(){
+  for(var r=0;r<MUSH_ROWS;r++){
+    var hasMush=false;
+    for(var i=0;i<mush.length;i++){ if(mush[i].gR===r){hasMush=true;break;} }
+    if(!hasMush){
+      // find a random free column in this row
+      var freeCols=[];
+      for(var c2=0;c2<MUSH_COLS;c2++){
+        var occ=false;
+        for(var i2=0;i2<mush.length;i2++){ if(mush[i2].gR===r&&mush[i2].gC===c2){occ=true;break;} }
+        if(!occ) freeCols.push(c2);
+      }
+      if(freeCols.length>0){
+        var col=freeCols[Math.floor(Math.random()*freeCols.length)];
+        mush.push({x:MUSH_OFF_X+col*MUSH_CW,y:MUSH_OFF_Y+r*MUSH_CH,w:18,h:14,stemH:0,gR:r,gC:col,poisoned:false,pTimer:0,hp:4});
+      }
+    }
+  }
+}
+
 // --- helpers ---
 function rnd(a,b){return a+Math.random()*(b-a)}
 function rectHit(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y }
@@ -374,17 +395,13 @@ function spawnWaveCenti(){
   centiSpawned++;
 }
 
-// --- row-splitting constants for mushroom destruction ---
-var SMALL_MUSH_W = 12, SMALL_MUSH_H = 8, SMALL_SPAWN_INTERVAL = 40;
-
-// --- spawn one centipede wave (all segments at once) ---
 
 // --- apply poison to centipede segments near poisoned mushrooms ---
 function tickPoison(dt){
   for(var i=mush.length-1;i>=0;i--){
     var m=mush[i]; if(!m.poisoned) continue;
-    // small mushrooms have shorter poison life and less damage range
-    var poisonLife = m.small ? POISON_LIFE/4 : POISON_LIFE;
+    var hpFrac=(m.hp||4)/4;
+    var poisonLife = POISON_LIFE * hpFrac;
     m.pTimer += dt;
     if(m.pTimer >= poisonLife){ m.poisoned=false; m.pTimer=0; }
     // damage every centipede segment within proximity of the mushroom
@@ -393,11 +410,10 @@ function tickPoison(dt){
       for(var k=c.segments.length-1;k>=0;k--){
         var s=c.segments[k];
         var dx=s.x-m.x, dy=s.y-m.y;
-        // small range: 1 cell for regular, half-cell for small mushrooms
-        var range = m.small ? MUSH_CW : MUSH_CW*2;
-        if(Math.abs(dx)<range && Math.abs(dy) < (m.small ? MUSH_CH/3 : MUSH_CH)){
-          s.w = Math.max(4, s.w - (m.small?1:POISON_DMG));
-          s.h = Math.max(3, s.h - (m.small?0.5:POISON_DMG/2));
+        var range = MUSH_CW * (0.5 + hpFrac*0.5);
+        if(Math.abs(dx)<range && Math.abs(dy) < MUSH_CH*hpFrac){
+          s.w = Math.max(4, s.w - POISON_DMG*hpFrac);
+          s.h = Math.max(3, s.h - POISON_DMG/2*hpFrac);
         }
       }
     }
@@ -412,7 +428,7 @@ function spawnMush(){
         if(mush[i].gR===r&&mush[i].gC===c2){occupied=true;break}
       }
       if(!occupied){
-        mush.push({x:MUSH_OFF_X+c2*MUSH_CW,y:MUSH_OFF_Y+r*MUSH_CH,w:18,h:14,stemH:0,gR:r,gC:c2,poisoned:false,pTimer:0});
+        mush.push({x:MUSH_OFF_X+c2*MUSH_CW,y:MUSH_OFF_Y+r*MUSH_CH,w:18,h:14,stemH:0,gR:r,gC:c2,poisoned:false,pTimer:0,hp:4});
         return; // one mushroom per frame only when a slot is empty
       }
     }
@@ -453,37 +469,18 @@ function update(dt){
 
   for(var i=mush.length-1;i>=0;i--){
     var m=mush[i];
-    // bullet hits mushroom → destroy + spawn two smaller replacements in same row (staggered)
+    // bullet hits mushroom → authentic 4-HP degradation cycle
     for(var j=bullets.length-1;j>=0;j--){
       var b=bullets[j]; if(rectHit(b,m)){
-        bullets.splice(j,1); score+=1; playSfx("mushroom_hit"); updateHUD(); triggerFlash("#fff"); spawnBurst(m.x,m.y,"#ff9",8);
-        // remove current large mushroom from mush array (splice by index i)
-        mush.splice(i,1);
-        var rowY = MUSH_OFF_Y + m.gR * MUSH_CH;
-        var midC = m.gC;
-        for(var sc=0;sc<2;sc++){
-          // find free slot in same row at column midC+sc (or nearest free)
-          var slotFree=true;
-          for(var oi=0;oi<mush.length;oi++){
-            if(mush[oi].gR===m.gR&&Math.abs(mush[oi].gC-midC-sc)<=1){slotFree=false;break}
-          }
-          // fallback: use adjacent column with offset
-          var finalCol = midC + sc;
-          var occ=false; for(var oi2=0;oi2<mush.length;oi2++){if(mush[oi2].gR===m.gR&&mush[oi2].gC===finalCol){occ=true;break}}
-          if(!occ){
-            mush.push({x:MUSH_OFF_X+finalCol*MUSH_CW,y:rowY,w:SMALL_MUSH_W,h:SMALL_MUSH_H,stemH:0,gR:m.gR,gC:finalCol,poisoned:false,pTimer:0,small:true});
-          } else {
-            // slot taken: try next free column in same row
-            for(var fc=1;fc<MUSH_COLS;fc++){
-          var testCol = (midC+sc+fc)%(MUSH_COLS);
-          var occ2=false; for(var oi3=0;oi3<mush.length;oi3++){if(mush[oi3].gR===m.gR&&mush[oi3].gC===testCol){occ2=true;break}}
-              if(!occ2){
-                mush.push({x:MUSH_OFF_X+testCol*MUSH_CW,y:rowY,w:SMALL_MUSH_W,h:SMALL_MUSH_H,stemH:0,gR:m.gR,gC:testCol,poisoned:false,pTimer:0,small:true});
-                break;
-              }
-            }
-          }
+        bullets.splice(j,1); playSfx("mushroom_hit"); triggerFlash("#fff"); spawnBurst(m.x,m.y,"#ff9",6);
+        m.hp = (m.hp || 4) - 1;
+        if(m.hp <= 0){
+          score += 1; mush.splice(i,1);
+        } else {
+          m.w = 18 * (m.hp / 4);
+          m.h = 14 * (m.hp / 4);
         }
+        updateHUD();
         break; // one bullet hit per mushroom iteration max
       }
     }
@@ -542,6 +539,19 @@ function update(dt){
       }
     }
 
+    // centipede nibble: segments crossing mushrooms damage them (HP-1)
+    for(var si2=c.segments.length-1;si2>=0;si2--){
+      var seg2=c.segments[si2];
+      for(var mi3=mush.length-1;mi3>=0;mi3--){
+        var m2=mush[mi3];
+        if(Math.abs(seg2.x-m2.x)<m2.w/2+4 && Math.abs(seg2.y-m2.y)<m2.h/2+2){
+          m2.hp=(m2.hp||4)-1;
+          if(m2.hp<=0){ mush.splice(mi3,1); }
+          else{ m2.w=18*(m2.hp/4); m2.h=14*(m2.hp/4); }
+        }
+      }
+    }
+
     // bullet hits centipede segment -> split into independent chasers
       for(var bi=bullets.length-1;bi>=0;bi--){
         var b=bullets[bi]; if(!b) continue;
@@ -579,7 +589,7 @@ function update(dt){
       if(rectHit(player,head) && player.invT<=0){
         playSfx("player_damage");
         lives--; updateHUD(); triggerFlash("#f44");
-        if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); } else { player.invT = 2000; showGameOver(); return; }
+        if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); regenMushrooms(); } else { player.invT = 2000; showGameOver(); return; }
       }
     }
 
@@ -616,7 +626,7 @@ function update(dt){
     // player hits spider -> lose life (respawn when lives remain, game over otherwise)
      if(rectHit(player,sp) && player.invT<=0){
        lives--; updateHUD(); triggerFlash("#f44");
-       if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); } else { showGameOver(); return; }
+       if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); regenMushrooms(); } else { showGameOver(); return; }
      }
 
      // cleanup off-screen
@@ -647,7 +657,7 @@ function update(dt){
             if(!occupied){
               mush.push({
                 x: slotX, y: rowY, w: 18, h: 14, stemH: 0,
-                gR: fr, gC: fc, poisoned: false, pTimer: 0
+                gR: fr, gC: fc, poisoned: false, pTimer: 0, hp: 4
               });
             }
             break;
@@ -670,7 +680,7 @@ function update(dt){
     // player hits flea -> lose life (respawn when lives remain)
     if(rectHit(player,fl) && player.invT<=0){
       lives--; updateHUD(); triggerFlash("#f44");
-      if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); } else { showGameOver(); return; }
+      if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); regenMushrooms(); } else { showGameOver(); return; }
     }
     // cleanup off-screen (bottom)
     if(fl.y > H+16) fleas.splice(fi,1);
@@ -708,7 +718,7 @@ function update(dt){
     // player hits scorpion -> lose life (respawn when lives remain)
     if(rectHit(player,sc) && player.invT<=0){
       lives--; updateHUD(); triggerFlash("#f44");
-      if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); } else { showGameOver(); return; }
+      if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); regenMushrooms(); } else { showGameOver(); return; }
     }
     // cleanup off-screen
     if(sc.x < -30 || sc.x > W+30) scorpions.splice(sci,1);
@@ -752,10 +762,14 @@ function drawGame(){
   ctx.strokeStyle="rgba(0,200,80,.15)"; ctx.lineWidth=.5;
   for(var gy=4;gy<H;gy+=4){var ly=W*gy/H;ctx.beginPath();ctx.moveTo(ly,0);ctx.lineTo(ly,H);ctx.stroke()}
 
-  // mushrooms (grid-aligned, poisoned ones glow purple)
+  // mushrooms (grid-aligned, poisoned ones glow purple, HP-based color depth)
   for(var m of mush){
-    var baseFill=m.small?(m.poisoned?"#48b":"#377"):m.poisoned?"#83a":"#6B2";
-    var stemFill=m.small?(m.poisoned?"#409":"#377"):(m.poisoned?"#619":"#3a0");
+    var hp=m.hp||4;
+    var hpFrac=hp/4;
+    var cr=Math.floor(0x6B*hpFrac), cg=Math.floor(0x22+0x99*(1-hpFrac)), cb=Math.floor(0x02+0x60*(1-hpFrac));
+    var cr2=Math.floor(0x3a*hpFrac), cg2=Math.floor(0x00+0x60*(1-hpFrac)), cb2=Math.floor(0x00+0x30*(1-hpFrac));
+    var baseFill=m.poisoned?("rgb("+Math.floor(0x83*hpFrac)+","+Math.floor(0x3a*hpFrac)+",170)"):"rgb("+cr+","+cg+","+cb+")";
+    var stemFill=m.poisoned?("rgb("+Math.floor(0x61*hpFrac)+","+Math.floor(0x19*hpFrac)+",150)"):"rgb("+cr2+","+cg2+","+cb2+")";
     ctx.fillStyle=baseFill; ctx.fillRect(m.x-m.w/2,m.y-4,m.w,m.h);
     ctx.fillStyle=stemFill;var cy=m.y-2;ctx.beginPath();ctx.arc(m.x,cy,m.w/2,Math.PI,true);ctx.fill()
   }
