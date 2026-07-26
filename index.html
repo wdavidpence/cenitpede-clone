@@ -274,14 +274,7 @@ function drawPlayerSprite(px,py,invT){
   ctx.globalAlpha=1;
 }
 
-// --- CRT overlay (drawn on canvas for cross-browser compositing) ---
-function drawCrtOverlay(){
-  ctx.fillStyle="rgba(0,0,0,.06)";
-  for(var sl=0;sl<H;sl+=4){ctx.fillRect(0,sl,W,1);}
-  var grd=ctx.createRadialGradient(W/2,H/2,W*.18,W/2,H/2,W*.7);
-  grd.addColorStop(0,"rgba(0,0,0,0)");grd.addColorStop(1,"rgba(0,0,0,.18)");
-  ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
-}
+// --- CRT overlay handled by CSS #crt div (::before scanlines + ::after vignette) ---
 
 // --- parallax depth layer (subtle ambient dots for playfield depth) ---
 function drawBgDepth(){
@@ -846,14 +839,17 @@ function update(dt){
     if(!c.alive || head.x < -24 || head.x > W+24) centi.splice(i,1);
   }
 
-    // player vs centipede segments -> lose life (with invincibility frames)
+    // player vs centipede segments -> lose life (any segment, with invincibility frames)
     for(var j=centi.length-1;j>=0;j--){
       var c=centi[j]; if(!c || !c.segments[0]) continue;
-      var head=c.segments[0];
-      if(rectHit(player,head) && player.invT<=0){
-        playSfx("player_damage");
-        lives--; updateHUD(); triggerFlash("#f44");
-        if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); regenMushrooms(); } else { player.invT = 2000; showGameOver(); return; }
+      for(var si3=0;si3<c.segments.length;si3++){
+        var seg3=c.segments[si3];
+        if(rectHit(player,seg3) && player.invT<=0){
+          playSfx("player_damage");
+          lives--; updateHUD(); triggerFlash("#f44");
+          if(lives>0){ player.invT=1200; player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); regenMushrooms(); } else { player.invT = 2000; showGameOver(); return; }
+          break;
+        }
       }
     }
 
@@ -1057,7 +1053,6 @@ function drawGame(){
   drawFlash();
   drawWaveBanner();
   drawPopups();
-  drawCrtOverlay();
 }
 
 // --- HUD ---

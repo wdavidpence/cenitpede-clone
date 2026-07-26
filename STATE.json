@@ -1,35 +1,35 @@
 {
   "project": "cenitpede-clone",
   "target_description": "Clean-room Centipede-inspired arcade game, touch-first and playable on iPhone Safari; deployed via GitHub Pages at https://github.com/wdavidpence/cenitpede-clone",
-  "overall_score": 95.0,
+  "overall_score": 96.0,
   "checklist": [
     {"item": "Phase 0 baseline — repo identity and architecture plan documented", "score": 1.0, "notes": "README.md present; docs/architecture.md and docs/project-plan.md authored"},
-    {"item": "Phase 1 vertical slice — playable game loop with player, mushrooms, centipede, collisions, scoring", "score": 0.95, "notes": "CRITICAL FIX: startGame() never initialized centiTarget for wave 1. Fixed. Game loop draws attract mode when not running. Loop guard simplified: rAF always runs first. DPR-aware canvas backing now renders at native pixel density on Retina displays."},
-    {"item": "Phase 2 enemy ecology — segment behavior, head turns, spider/flea/scorpion interactions", "score": 0.90, "notes": "Wave 1 centipede fix means enemy ecology activates from first frame. Spider distance-based scoring (300/600/900). Flea spawns mushrooms. Scorpion poisons mushrooms. All verified via scorecard PASS and smoke PASS."},
-    {"item": "Phase 3 rules and cabinet feel — scoring, audio, particles, HUD, graphics polish", "score": 0.94, "notes": "Parallax/ambient depth layer (40 dots, 3 layers). Player zone boundary indicator. CRT scanline+vignette overlay. Authentic scoring. 12 Web Audio sounds. Particle FX capped at 80. Wave-clear bonus: 10 pts per remaining mushroom, awarded through real wave-completion path with popup."},
-    {"item": "Phase 4 iPhone Safari hardening — touch-action, safe-area, orientation", "score": 0.93, "notes": "Orientation lock with fallback. Fullscreen on user gesture. Safe-area layout. DPR capped at 2 prevents over-scaling. NOT verified on real device."},
-    {"item": "Phase 5 — progression depth and attract mode", "score": 0.94, "notes": "Wave transitions verified. Bonus waves every 5 waves. Document visibility API handler pauses/resumes animation loop (prevents runaway update when tab hidden; resets accumulator on resume)."},
-    {"item": "Phase 6 — Retina/backing store, visibility guard, wave bonus", "score": 0.95, "notes": "ADDED: (1) DPR-aware canvas: canvas.width/height = W*DPR, H*DPR; ctx.scale(DPR,DPR); CSS stays 320x240 logical. DPR = min(devicePixelRatio,2). (2) visibilitychange listener: pauses loop when document.hidden, resets lastT+acc on resume. (3) Wave-clear bonus: mush.length * 10 added to score at wave completion in real code path, with popup. Tests added for DPR calc, visibility guard, wave-clear bonus."},
+    {"item": "Phase 1 vertical slice — playable game loop with player, mushrooms, centipede, collisions, scoring", "score": 0.96, "notes": "CRITICAL FIX (this pass): player-centipede collision now checks ALL segments, not just heads. Body segments were previously non-lethal — a gameplay regression vs authentic Centipede. Fixed by iterating all segments in collision loop."},
+    {"item": "Phase 2 enemy ecology — segment behavior, head turns, spider/flea/scorpion interactions", "score": 0.92, "notes": "Spider distance-based scoring (300/600/900). Flea spawns mushrooms. Scorpion poisons mushrooms. All verified via scorecard PASS and smoke PASS."},
+    {"item": "Phase 3 rules and cabinet feel — scoring, audio, particles, HUD, graphics polish", "score": 0.96, "notes": "CRITICAL FIX (this pass): removed duplicate CRT overlay. CSS #crt div (scanlines+vignette) and canvas drawCrtOverlay() were both rendering, causing doubled/darker effect. Removed canvas version; CSS handles it at correct z-index. Wave-clear bonus: 10 pts per remaining mushroom. 12 Web Audio sounds. Parallax depth layer. Particle FX capped at 80."},
+    {"item": "Phase 4 iPhone Safari hardening — touch-action, safe-area, orientation", "score": 0.93, "notes": "Orientation lock with fallback. Fullscreen on user gesture. Safe-area layout. DPR capped at 2. NOT verified on real device."},
+    {"item": "Phase 5 — progression depth and attract mode", "score": 0.94, "notes": "Wave transitions verified. Bonus waves every 5 waves. Document visibility API handler pauses/resumes animation loop."},
+    {"item": "Phase 6 — Retina/backing store, visibility guard, wave bonus", "score": 0.96, "notes": "DPR-aware canvas: canvas.width/height = W*DPR, H*DPR; ctx.scale(DPR,DPR). CSS stays 320x240 logical. DPR = min(devicePixelRatio,2). visibilitychange listener pauses/resumes with acc reset. Wave-clear bonus awarded in real code path."},
     {"item": "Autonomous loop infrastructure — STATE.json + supervisor.sh + docs/autonomous-loop.md", "score": 1.0, "notes": "Established in prior phases"}
   ],
   "last_test_report": {
-    "timestamp": "2026-07-26T03:34:26Z",
+    "timestamp": "2026-07-26T13:24:11Z",
     "command": "node scorecard.js && node tests/smoke.mjs && node -e \"new Function(require('fs').readFileSync('index.html','utf8').match(/<script[^>]*>([\\s\\S]*?)<\\/script>/)[1])\" && git diff --check",
     "status": "pass",
-    "details": "Scorecard: syntax OK, smoke PASS, all 9 gameplay markers present. Syntax check: inline JS compiles without error. git diff --check: clean. Smoke tests: 27 assertions for DPR, visibility guard, wave-clear bonus; all pass alongside existing tests. Changed paths: index.html (+10/-4), tests/smoke.mjs (+34/-1)."
+    "details": "Scorecard: syntax OK, smoke PASS (39 assertions), all 9 gameplay markers present. Syntax check: inline JS compiles without error. git diff --check: clean. Smoke tests: DPR, visibility guard, wave-clear bonus, split mechanic, cleanup, diagonal normalization, mushroom HP/nibble, spider/flea/scorpion scoring, extra life — all pass."
   },
-  "last_commit": "830b15e",
-  "next_action": "Remaining items for 100: (1) CRT duplicate: CSS #crt div and canvas-drawn scanlines both active — remove CSS #crt to eliminate double-overlap (verified both render); (2) Tests use extracted reimplementations not actual game code — risk of logic drift; (3) Real-device verification needed for: DPR rendering on Retina, visibility API pause/resume on iOS Safari backgrounding, touch-start flow, fullscreen API. Optional: devicePixelRatio change listener for window drag between monitors.",
-  "pass_count": 8,
+  "last_commit": "d13c2b2",
+  "next_action": "Remaining items for 100: (1) Tests use extracted reimplementations not actual game code — risk of logic drift; consider integration tests that exercise real game functions. (2) Real-device verification needed for: DPR rendering on Retina, visibility API pause/resume on iOS Safari backgrounding, touch-start flow, fullscreen API, safe-area-inset padding, orientation lock. (3) Optional: devicePixelRatio change listener for window drag between monitors.",
+  "pass_count": 9,
   "judge_review_due": false,
   "unverified_real_device_checks": [
     "DPR-aware canvas rendering at native pixel density on iPhone Retina display (should be 2x backing store)",
     "Document visibility API pause/resume when iOS Safari backgrounds the tab or locks screen",
     "Wave-clear bonus popup visibility and score accumulation timing on real display",
-    "Canvas context scale(DPR,2) interaction with CSS 320x240 layout on iPhone Safari viewport",
+    "Canvas context scale(DPR) interaction with CSS 320x240 layout on iPhone Safari viewport",
     "Touch-start flow from attract mode to game start on physical device",
     "Fullscreen API behavior on iOS Safari when entering from attract mode",
-    "Player zone boundary indicator visibility (rgba(0,60,30,.08)) on various display brightness levels",
-    "Parallax depth layer animation performance on older iPhone Safari (40 fillRect calls per frame at 2x backing)"
+    "Player zone boundary indicator visibility on various display brightness levels",
+    "Parallax depth layer animation performance on older iPhone Safari"
   ]
 }
