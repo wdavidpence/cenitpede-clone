@@ -35,11 +35,14 @@ canvas{display:block;background:#1a4927}
   100% {opacity:.95}
 }
 #start-prompt{animation:promptBlink 2s steps(2,start) infinite}
+#crt{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5}
+#crt::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px);z-index:6}
+#crt::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.22) 100%);z-index:7}
 </style>
 </head>
 <body>
 <div id="wr">
-<canvas id="cvs" width="320" height="240"></canvas>
+<canvas id="cvs" width="320" height="240"></canvas><div id="crt"></div>
 <div id="hud"><span>SCORE <b id="sc">0</b></span><span>LIVES <b id="lv">3</b></span><span>WAVE <b id="wg">1</b></span><span>HIGH <b id="hs">0</b></span></div>
 <div id="touch">
   <div class="dpad">
@@ -169,6 +172,138 @@ function drawFlash(){
   ctx.restore();
 }
 
+// --- procedural pixel-art sprite functions ---
+function drawMushroomSprite(x,y,w,h,hp,poisoned){
+  var f=(hp||4)/4;
+  var r=poisoned?Math.floor(0x83*f):Math.floor(0x6B*f);
+  var g=poisoned?Math.floor(0x3a*f):Math.floor(0x22+0x99*(1-f));
+  var b=poisoned?170:Math.floor(0x02+0x60*(1-f));
+  ctx.fillStyle="rgb("+r+","+g+","+b+")";
+  ctx.fillRect(x-w/2,y-4,w,h);
+  ctx.fillStyle="rgb("+Math.floor(r*.7)+","+Math.floor(g*.7)+","+Math.floor(b*.7)+")";
+  ctx.beginPath();ctx.arc(x,y-2,w/2,Math.PI,true);ctx.fill();
+  var spots=Math.max(0,hp-1);
+  ctx.fillStyle=poisoned?"#b6f":"#c84";
+  for(var si=0;si<spots;si++){
+    var sx=x-w/4+(si%2)*w/2, sy2=y-4+h*(si+1)/(spots+2);
+    ctx.fillRect(sx,sy2,2,2);
+  }
+  ctx.strokeStyle=poisoned?"#83c":"#472";ctx.lineWidth=.5;
+  ctx.strokeRect(x-w/2,y-4,w,h);
+}
+
+function drawCentipedeSprite(x,y,sw,sh,isHead,dirX){
+  ctx.fillStyle=isHead?"#e44":"#a33";
+  ctx.fillRect(x-sw/2,y-sh/2,sw,sh);
+  ctx.fillStyle=isHead?"#c22":"#822";
+  ctx.fillRect(x-sw/2+1,y-sh/2+1,sw-2,sh-2);
+  ctx.fillStyle=isHead?"#f66":"#c44";
+  ctx.fillRect(x-sw/4,y-sh/4,sw/2,sh/2);
+  ctx.strokeStyle=isHead?"#faa":"#600";ctx.lineWidth=.5;
+  ctx.strokeRect(x-sw/2,y-sh/2,sw,sh);
+  if(isHead){
+    var mDir=dirX||1;
+    ctx.strokeStyle="#f55";ctx.lineWidth=.8;
+    ctx.beginPath();ctx.moveTo(x+mDir*sw/2,y-sh/4);ctx.lineTo(x+mDir*(sw/2+3),y-sh/2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+mDir*sw/2,y+sh/4);ctx.lineTo(x+mDir*(sw/2+3),y+sh/2);ctx.stroke();
+  }
+}
+
+function drawSpiderSprite(x,y,sw,sh,dirX){
+  ctx.fillStyle="#2a1";ctx.fillRect(x-sw/2,y-sh/2,sw,sh);
+  ctx.fillStyle="#3c2";ctx.fillRect(x-sw/2+1,y-sh/2+1,sw-2,sh-2);
+  ctx.strokeStyle="#5c3";ctx.lineWidth=.6;
+  var lo=dirX>0?-2:2;
+  for(var li=0;li<4;li++){
+    var lx=x-sw/2+3+li*3;
+    ctx.beginPath();ctx.moveTo(lx,y-1);ctx.lineTo(lx+lo,y-5);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(lx,y+1);ctx.lineTo(lx+lo,y+5);ctx.stroke();
+  }
+  ctx.fillStyle="#f00";ctx.fillRect(x-3,y-2,2,2);ctx.fillRect(x+1,y-2,2,2);
+}
+
+function drawFleaSprite(x,y,sw,sh){
+  ctx.fillStyle="#654";ctx.fillRect(x-sw/2,y-sh/2,sw,sh);
+  ctx.fillStyle="#543";ctx.fillRect(x-sw/2+1,y-sh/2+1,sw-2,sh-2);
+  ctx.strokeStyle="#432";ctx.lineWidth=.6;
+  for(var fi=0;fi<3;fi++){
+    var fx=x-sw/2+2+fi*4;
+    ctx.beginPath();ctx.moveTo(fx,y-1);ctx.lineTo(fx+.8,y-5);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(fx,y+1);ctx.lineTo(fx+.8,y+5);ctx.stroke();
+  }
+  ctx.fillStyle="#321";ctx.fillRect(x-2,y-1,1,1);ctx.fillRect(x+1,y-1,1,1);
+}
+
+function drawScorpionSprite(sx,sy,dirX){
+  ctx.fillStyle="#639";ctx.fillRect(sx-8,sy-5,16,10);
+  ctx.fillStyle="#74a";ctx.fillRect(sx-12,sy-3,4,6);
+  ctx.strokeStyle="#96c";ctx.lineWidth=.6;
+  for(var sli=0;sli<4;sli++){
+    var slx=sx-5+sli*4;
+    ctx.beginPath();ctx.moveTo(slx,sy-1);ctx.lineTo(slx+2,sy-6);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(slx,sy+1);ctx.lineTo(slx+2,sy+6);ctx.stroke();
+  }
+  var pd=dirX>0?-1:1;
+  ctx.strokeStyle="#a8f";ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(sx+pd*7,sy-4);ctx.lineTo(sx+pd*13,sy-7);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(sx+pd*7,sy+4);ctx.lineTo(sx+pd*13,sy+7);ctx.stroke();
+  ctx.strokeStyle="#b9f";ctx.lineWidth=.8;
+  ctx.beginPath();ctx.moveTo(sx-dirX*8,sy);ctx.quadraticCurveTo(sx-dirX*14,sy-6,sx-dirX*16,sy-2);ctx.stroke();
+  ctx.fillStyle="#d0f";ctx.fillRect(sx-dirX*17,sy-3,2,2);
+}
+
+function drawPlayerSprite(px,py,invT){
+  var al=invT>0?(Math.floor(invT/150)%2===0?.3:1):1;
+  ctx.globalAlpha=al;
+  var flk=Math.random();
+  ctx.fillStyle="#f82";ctx.fillRect(px-3,py+8,2,2+flk*3);
+  ctx.fillStyle="#fc4";ctx.fillRect(px+1,py+8,2,2+flk*2);
+  ctx.fillStyle="#fe6";ctx.fillRect(px-1,py+9,2,1+flk);
+  ctx.fillStyle="#3af";ctx.fillRect(px-14,py,28,8);
+  ctx.fillStyle="#29d";ctx.fillRect(px-14,py,28,2);
+  ctx.strokeStyle="#9cf";ctx.lineWidth=1;ctx.strokeRect(px-14,py,28,8);
+  ctx.fillStyle="#5cf";ctx.fillRect(px-12,py+1,4,2);ctx.fillRect(px+8,py+1,4,2);
+  ctx.fillStyle="#6df";ctx.fillRect(px-10,py+1,2,2);ctx.fillRect(px+10,py+1,2,2);
+  ctx.globalAlpha=1;
+}
+
+// --- CRT overlay (drawn on canvas for cross-browser compositing) ---
+function drawCrtOverlay(){
+  ctx.fillStyle="rgba(0,0,0,.06)";
+  for(var sl=0;sl<H;sl+=4){ctx.fillRect(0,sl,W,1);}
+  var grd=ctx.createRadialGradient(W/2,H/2,W*.18,W/2,H/2,W*.7);
+  grd.addColorStop(0,"rgba(0,0,0,0)");grd.addColorStop(1,"rgba(0,0,0,.18)");
+  ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
+}
+
+// --- score popup system ---
+var popups=[];
+function spawnPopup(x,y,text,color){popups.push({x:x,y:y,text:text,color:color||"#ff0",life:40,maxLife:40});}
+function updatePopups(){for(var i=popups.length-1;i>=0;i--){popups[i].y-=.6;popups[i].life--;if(popups[i].life<=0)popups.splice(i,1);}}
+function drawPopups(){for(var p of popups){ctx.globalAlpha=Math.max(0,p.life/p.maxLife);ctx.fillStyle=p.color;ctx.font="bold 7px monospace";ctx.textAlign="center";ctx.fillText(p.text,p.x,p.y);}ctx.globalAlpha=1;}
+
+// --- attract mode screen ---
+function drawAttract(){
+  if(!running){ctx.fillStyle="#082812";ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#0d4a22";ctx.fillRect(0,0,W,3);ctx.fillRect(0,H-3,W,3);
+  var t=performance.now()/1000;for(var pi=0;pi<12;pi++){
+    ctx.fillStyle="rgba(100,255,100,"+(0.1+0.1*Math.sin(t+pi))+")";
+    ctx.fillRect(((pi*37+t*10)%W),((pi*23+t*5)%H),1,1);}
+  ctx.fillStyle="#ff6";ctx.font="bold 28px monospace";ctx.textAlign="center";
+  ctx.shadowColor="rgba(255,100,0,.4)";ctx.shadowBlur=16;
+  ctx.fillText("CENITPEDE",W/2,70);ctx.shadowBlur=0;
+  ctx.fillStyle="#fa6";ctx.font="bold 14px monospace";
+  ctx.fillText("HIGH SCORE: "+highScore,W/2,100);
+  ctx.fillStyle="rgba(255,255,255,"+(0.4+0.3*Math.sin(t*3))+")";
+  ctx.font="13px monospace";ctx.fillText("TAP SCREEN TO START",W/2,140);
+  ctx.fillStyle="#888";ctx.font="11px monospace";
+  ctx.fillText("ARROWS MOVE  |  Z / SPACE TO FIRE",W/2,170);
+  ctx.fillText("TOUCH: D-PAD + FIRE BUTTON",W/2,186);
+  ctx.fillStyle="#666";ctx.font="10px monospace";
+  ctx.fillText("ENEMIES: SPIDER 200-900",W/2,208);
+  ctx.fillText("FLEA 200  |  SCORPION 1000",W/2,222);}
+}
+
 // --- wire FX into collision events below this line ---
 // (bullet-hit, player-damage) triggered by updateFx calls inside loop() and drawGame()
 
@@ -291,51 +426,115 @@ function initAudio(){
 function playSfx(name){
   if(!audioCtx) return;
   try{
-    var ctx = audioCtx, now = ctx.currentTime, dur = 0.12, vol = 0.18;
+    var ctx = audioCtx, now = ctx.currentTime;
     var osc = ctx.createOscillator(), gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
     switch(name){
       case "fire":
         osc.type="sawtooth"; osc.frequency.setValueAtTime(800, now);
-        osc.frequency.exponentialRampToValueAtTime(200, now+dur*0.6);
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(vol, now+0.015);
-        gain.gain.exponentialRampToValueAtTime(0.001, now+dur);
+        osc.frequency.exponentialRampToValueAtTime(200, now+0.07);
+        gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.18, now+0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+0.12);
+        osc.start(now); osc.stop(now+0.12);
         break;
       case "mushroom_hit":
         osc.type="sine"; osc.frequency.setValueAtTime(1200, now);
-        osc.frequency.exponentialRampToValueAtTime(600, now+dur*0.5);
-        gain.gain.setValueAtTime(vol*0.8, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now+dur*0.9);
+        osc.frequency.exponentialRampToValueAtTime(600, now+0.06);
+        gain.gain.setValueAtTime(0.14, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.1);
+        osc.start(now); osc.stop(now+0.1);
         break;
       case "enemy_hit":
         osc.type="square"; osc.frequency.setValueAtTime(400, now);
-        osc.frequency.exponentialRampToValueAtTime(80, now+dur*0.7);
-        gain.gain.setValueAtTime(vol*1.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now+dur*0.95);
+        osc.frequency.exponentialRampToValueAtTime(80, now+0.08);
+        gain.gain.setValueAtTime(0.22, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.1);
+        osc.start(now); osc.stop(now+0.11);
+        break;
+      case "head_hit":
+        osc.type="square"; osc.frequency.setValueAtTime(500, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now+0.09);
+        gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.11);
+        osc.start(now); osc.stop(now+0.11);
+        break;
+      case "body_hit":
+        osc.type="square"; osc.frequency.setValueAtTime(350, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now+0.07);
+        gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.09);
+        osc.start(now); osc.stop(now+0.09);
+        break;
+      case "spider_kill":
+        osc.type="sawtooth"; osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now+0.15);
+        gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.18);
+        osc.start(now); osc.stop(now+0.18);
+        var osc2=ctx.createOscillator(),g2=ctx.createGain();
+        osc2.connect(g2);g2.connect(ctx.destination);
+        osc2.type="sine";osc2.frequency.setValueAtTime(1200,now+0.03);
+        osc2.frequency.exponentialRampToValueAtTime(400,now+0.18);
+        g2.gain.setValueAtTime(0.12,now+0.03);g2.gain.exponentialRampToValueAtTime(0.001,now+0.2);
+        osc2.start(now+0.03);osc2.stop(now+0.2);
+        break;
+      case "flea_kill":
+        osc.type="triangle"; osc.frequency.setValueAtTime(900, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now+0.08);
+        gain.gain.setValueAtTime(0.16, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.1);
+        osc.start(now); osc.stop(now+0.1);
+        break;
+      case "scorpion_kill":
+        osc.type="sawtooth"; osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(1000, now+0.15);
+        gain.gain.setValueAtTime(0.22, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.2);
+        osc.start(now); osc.stop(now+0.2);
+        var o3=ctx.createOscillator(),g3=ctx.createGain();
+        o3.connect(g3);g3.connect(ctx.destination);
+        o3.type="sine";o3.frequency.setValueAtTime(1500,now+0.08);
+        o3.frequency.exponentialRampToValueAtTime(500,now+0.22);
+        g3.gain.setValueAtTime(0.1,now+0.08);g3.gain.exponentialRampToValueAtTime(0.001,now+0.25);
+        o3.start(now+0.08);o3.stop(now+0.25);
+        break;
+      case "extra_life":
+        osc.type="sine"; osc.frequency.setValueAtTime(600, now);
+        osc.frequency.setValueAtTime(800, now+0.1);
+        osc.frequency.setValueAtTime(1000, now+0.2);
+        osc.frequency.setValueAtTime(1200, now+0.3);
+        gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now+0.5);
+        osc.start(now); osc.stop(now+0.5);
         break;
       case "player_damage":
         osc.type="sawtooth"; osc.frequency.setValueAtTime(120, now);
-        osc.frequency.exponentialRampToValueAtTime(40, now+dur*0.8);
-        gain.gain.setValueAtTime(vol*0.6, now);
-        gain.gain.linearRampToValueAtTime(0, now+dur*1.2);
+        osc.frequency.exponentialRampToValueAtTime(40, now+0.1);
+        gain.gain.setValueAtTime(0.11, now); gain.gain.linearRampToValueAtTime(0, now+0.14);
+        osc.start(now); osc.stop(now+0.14);
         break;
       case "wave_transition":
         var wBase=300+wave*25, wPeak=Math.min(wBase*2,900);
         osc.type="sine"; osc.frequency.setValueAtTime(wBase, now);
-        osc.frequency.exponentialRampToValueAtTime(wPeak, now+dur*0.7);
-        gain.gain.setValueAtTime(vol, now);
-        gain.gain.linearRampToValueAtTime(0, now+dur*1.5);
+        osc.frequency.exponentialRampToValueAtTime(wPeak, now+0.08);
+        gain.gain.setValueAtTime(0.18, now); gain.gain.linearRampToValueAtTime(0, now+0.22);
+        osc.start(now); osc.stop(now+0.22);
         break;
       case "game_over":
         osc.type="triangle"; osc.frequency.setValueAtTime(400, now);
-        osc.frequency.exponentialRampToValueAtTime(60, now+dur*1.2);
-        gain.gain.setValueAtTime(vol*0.8, now);
-        gain.gain.linearRampToValueAtTime(0, now+dur*1.4);
+        osc.frequency.exponentialRampToValueAtTime(60, now+0.14);
+        gain.gain.setValueAtTime(0.14, now); gain.gain.linearRampToValueAtTime(0, now+0.17);
+        osc.start(now); osc.stop(now+0.17);
         break;
     }
-    osc.start(now);
-    osc.stop(now+dur);
+  }catch(e){}
+}
+function playGameJingle(){
+  if(!audioCtx) return;
+  try{
+    var ctx=audioCtx,now=ctx.currentTime;
+    var notes=[880,740,620,520,440,370];
+    for(var ni=0;ni<notes.length;ni++){
+      var o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.type="triangle";o.frequency.setValueAtTime(notes[ni],now+ni*0.13);
+      g.gain.setValueAtTime(0,now+ni*0.13);
+      g.gain.linearRampToValueAtTime(0.13,now+ni*0.13+0.02);
+      g.gain.linearRampToValueAtTime(0,now+ni*0.13+0.12);
+      o.start(now+ni*0.13);o.stop(now+ni*0.13+0.12);
+    }
   }catch(e){}
 }
 
@@ -368,7 +567,7 @@ function startGame(){
   bullets=[]; mush=[]; centi=[]; fleas=[]; spiders=[]; scorpions=[];
   fxPars=[];
   score=0; lives=3; wave=1; nextExtraLife=12000; spiderSpawnTimer=0; fleaSpawnTimer=0; scorpionSpawnTimer=0; lastShotTime=0;
-  centiSpawned=0; centiTarget=Math.min(1+Math.floor(wave/4),4);
+  centiSpawned=0;
   ovrEl.style.display="none";
   document.getElementById("ovrMsg").style.display="none";
   var ov=document.getElementById("ovr");if(ov){ov.querySelector("h1").textContent="CENITPEDE";var mp=Array.from(ov.querySelectorAll("p")).find(function(p){return p.id!=="ovrMsg"});if(mp)mp.textContent="TAP SCREEN TO START";}
@@ -380,6 +579,7 @@ function showGameOver(){
   gameOver = true;
   running = false;
   var msg = document.getElementById("ovrMsg");
+  playGameJingle();
   playSfx("game_over");
   ovrEl.querySelector("h1").textContent = "GAME OVER";
   msg.textContent = "SCORE: " + score + "  |  HIGH: " + highScore;
@@ -391,22 +591,24 @@ function showGameOver(){
 function startNextWave(){
   wave++;
   centiSpawned=0;
-  // difficulty scales with wave: more segments, faster speed
-  centiTarget = Math.min(1+Math.floor(wave/4),4);
+  var wScale=Math.min(1+wave*0.08,2.5);
+  centiTarget=Math.min(Math.floor((1+wave/4)*wScale),12);
+  if(wave%5===0) centiTarget=Math.min(centiTarget+4,16);
   hudWg.textContent = wave;
-  waveBannerT=60;
+  waveBannerT=70;
 }
 
 // --- spawn one centipede wave (all segments at once) ---
 function spawnWaveCenti(){
   if(centiSpawned >= centiTarget) return;
-  var segCount = Math.min(11 + wave, 18);
+  var wScale=Math.min(1+wave*0.08,2.5);
+  var segCount = Math.min(Math.floor((11+wave)*wScale),22);
+  if(wave%5===0) segCount=Math.min(segCount+4,22);
   var headY = -8;
-  // descend one row every few waves for variety
   if(wave > 1 && centiSpawned % 3 === 0) headY += 8;
     centi.push({
-      segments:[], dirX: 1, speed: Math.min(0.5 + wave*0.1 + Math.max(0,wave-3)*0.06, 3.5), t:0, alive:true, mushTurnCooldown: 0,
-      x: rnd(-24,W+24), y: headY
+      segments:[], dirX: 1, speed: Math.min((0.5+wave*0.1+Math.max(0,wave-3)*0.06)*wScale, 4.5), t:0, alive:true, mushTurnCooldown: 0,
+      x: rnd(-24,W+24), y: headY, waveColor: wave
     });
   var last = centi[centi.length-1];
   for(var i=0;i<segCount;i++){
@@ -584,16 +786,14 @@ function update(dt){
         for(var sk=c.segments.length-1;sk>=0;sk--){
           var seg=c.segments[sk];
           if(rectHit(b,seg)){
-            bullets.splice(bi,1); playSfx("enemy_hit");
+            bullets.splice(bi,1);
             spawnBurst(seg.x, seg.y, "#af5", 6);
             triggerFlash("#fff");
             if(sk===0){
-              // hit the HEAD: destroy it, next segment becomes new head
-              score+=100;
+              playSfx("head_hit");score+=100;spawnPopup(seg.x,seg.y,"+100","#ff4");
               c.segments.splice(0,1);
             } else {
-              // hit a BODY segment: tail segments behind split into independent group
-              score+=10;
+              playSfx("body_hit");score+=10;spawnPopup(seg.x,seg.y,"+10","#fa4");
               var tailSegs=c.segments.splice(sk);
               tailSegs.shift();
               if(tailSegs.length>0){
@@ -660,7 +860,7 @@ function update(dt){
       if(rectHit(b2,sp)){
         var spiderDist=Math.abs(player.y-sp.y);
         var spiderPts=spiderDist>=64?300:spiderDist>=22?600:900;
-        bullets.splice(bi2,1); playSfx("enemy_hit"); spiders.splice(si,1); score+=spiderPts; updateHUD(); spawnBurst(sp.x, sp.y, "#a7d", 6); break;
+        bullets.splice(bi2,1); playSfx("spider_kill"); spiders.splice(si,1); score+=spiderPts; updateHUD(); spawnBurst(sp.x, sp.y, "#a7d", 6); spawnPopup(sp.x,sp.y,"+"+spiderPts,"#d6f"); break;
       }
     }
     // player hits spider -> lose life (respawn when lives remain, game over otherwise)
@@ -710,9 +910,9 @@ function update(dt){
       var bf=bullets[bfi]; if(!bf) continue;
       if(rectHit(bf,fl)){
         bullets.splice(bfi,1);
-        playSfx("enemy_hit");
-        spawnBurst(fl.x, fl.y, "#fa5", 6); // bullet-hit feedback
-        if(!fl.killed){ fl.killed = true; score += FLEA_SCORE; updateHUD(); }
+        playSfx("flea_kill");
+        spawnBurst(fl.x, fl.y, "#fa5", 6);
+        if(!fl.killed){ fl.killed = true; score += FLEA_SCORE; updateHUD(); spawnPopup(fl.x,fl.y,"+"+FLEA_SCORE,"#fa5"); }
         fleas.splice(fi,1); break;
       }
     }
@@ -749,9 +949,9 @@ function update(dt){
       var bs2=bullets[bsi]; if(!bs2) continue;
       if(rectHit(bs2,sc)){
         bullets.splice(bsi,1);
-        playSfx("enemy_hit");
-        spawnBurst(sc.x, sc.y, "#a7d", 6); // bullet-hit feedback
-        if(!sc.killed){ sc.killed = true; score += SCORPION_SCORE; updateHUD(); }
+        playSfx("scorpion_kill");
+        spawnBurst(sc.x, sc.y, "#a7d", 6);
+        if(!sc.killed){ sc.killed = true; score += SCORPION_SCORE; updateHUD(); spawnPopup(sc.x,sc.y,"+"+SCORPION_SCORE,"#d6f"); }
         scorpions.splice(sci,1); break;
       }
     }
@@ -778,127 +978,62 @@ function update(dt){
 
   updateHUD();
   updateFx();
+  updatePopups();
 }
 
-// --- WAVE banner (centered on canvas for ~60 frames after wave++ ) ---
+// --- WAVE banner (centered on canvas for ~70 frames after wave++ ) ---
 function drawWaveBanner(){
   if(waveBannerT<=0) return;
   ctx.save();
-  var fade = Math.min(1, waveBannerT / 24); // ease-in over first quarter of remaining frames
-  ctx.fillStyle="rgba(255,170,20,"+fade+")";
-  ctx.fillRect(0,0,W,H);
+  var fade = Math.min(1, waveBannerT / 24);
+  var isBonus=wave%5===0;
+  var bCol=isBonus?"rgba(255,80,20,":"rgba(255,170,20,";
+  ctx.fillStyle=bCol+fade+")";ctx.fillRect(0,0,W,H);
   ctx.save();
-  ctx.font="bold 16px monospace";ctx.textAlign="center";
-  ctx.fillStyle="#ff9";
-  ctx.fillText("WAVE "+wave,W/2,H/2);
+  ctx.font="bold "+(isBonus?18:16)+"px monospace";ctx.textAlign="center";
+  ctx.fillStyle=isBonus?"#f84":"#ff9";
+  ctx.fillText((isBonus?"BONUS ":"")+"WAVE "+wave,W/2,H/2);
   ctx.restore();
   ctx.restore();
 }
 
 // --- draw ---
 function drawGame(){
+  if(!running){drawAttract();return;}
   ctx.fillStyle="#0d3b1f"; ctx.fillRect(0,0,W,H);
-  // grid lines
   ctx.strokeStyle="rgba(0,200,80,.15)"; ctx.lineWidth=.5;
   for(var gy=4;gy<H;gy+=4){var ly=W*gy/H;ctx.beginPath();ctx.moveTo(ly,0);ctx.lineTo(ly,H);ctx.stroke()}
 
-  // mushrooms (grid-aligned, poisoned ones glow purple, HP-based color depth)
-  for(var m of mush){
-    var hp=m.hp||4;
-    var hpFrac=hp/4;
-    var cr=Math.floor(0x6B*hpFrac), cg=Math.floor(0x22+0x99*(1-hpFrac)), cb=Math.floor(0x02+0x60*(1-hpFrac));
-    var cr2=Math.floor(0x3a*hpFrac), cg2=Math.floor(0x00+0x60*(1-hpFrac)), cb2=Math.floor(0x00+0x30*(1-hpFrac));
-    var baseFill=m.poisoned?("rgb("+Math.floor(0x83*hpFrac)+","+Math.floor(0x3a*hpFrac)+",170)"):"rgb("+cr+","+cg+","+cb+")";
-    var stemFill=m.poisoned?("rgb("+Math.floor(0x61*hpFrac)+","+Math.floor(0x19*hpFrac)+",150)"):"rgb("+cr2+","+cg2+","+cb2+")";
-    ctx.fillStyle=baseFill; ctx.fillRect(m.x-m.w/2,m.y-4,m.w,m.h);
-    ctx.fillStyle=stemFill;var cy=m.y-2;ctx.beginPath();ctx.arc(m.x,cy,m.w/2,Math.PI,true);ctx.fill()
-  }
+  for(var m of mush){ drawMushroomSprite(m.x,m.y,m.w,m.h,m.hp,m.poisoned); }
 
-  // centipedes — red segmented bodies
   for(var c of centi){
     if(!c||!c.segments[0]) continue;
-    ctx.fillStyle="#a33";
-    for(var s of c.segments){
-      ctx.fillRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h);
-      ctx.strokeStyle="#810";ctx.lineWidth=.5;ctx.strokeRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h)
-    }
+    for(var s of c.segments){ drawCentipedeSprite(s.x,s.y,s.w,s.h,false,c.dirX); }
   }
-
-  // individual chasers (red dots with trail)
   for(var i=centi.length-1;i>=0;i--){
     var c=centi[i]; if(!c) continue; var s=c.segments[0]; if(!s) continue;
-    ctx.fillStyle="#c44";ctx.fillRect(s.x-s.w/2,s.y-s.h/2,s.w,s.h);
+    drawCentipedeSprite(s.x,s.y,s.w,s.h,true,c.dirX);
   }
 
-  // spiders — dark body with 8 legs and two eyes, hunts player when close
-  for(var spi of spiders){
-    ctx.fillStyle="#2a1";ctx.fillRect(spi.x-spi.w/2,spi.y-spi.h/2,spi.w,spi.h);
-    ctx.strokeStyle="#5c3";ctx.lineWidth=.6;
-    var legOff=spi.dirX>0?-2:2;
-    for(var li=0;li<4;li++){
-      var lx=spi.x-spi.w/2+3+li*3, ly=spi.y;
-      ctx.beginPath();ctx.moveTo(lx,ly-1);ctx.lineTo(lx+legOff,ly-5);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(lx,ly+1);ctx.lineTo(lx+legOff,ly+5);ctx.stroke();
-    }
-    ctx.fillStyle="#f00";ctx.fillRect(spi.x-3,spi.y-2,2,2);ctx.fillRect(spi.x+1,spi.y-2,2,2);
-  }
+  for(var spi of spiders){ drawSpiderSprite(spi.x,spi.y,spi.w,spi.h,spi.dirX); }
+  for(var fli of fleas){ drawFleaSprite(fli.x,fli.y,fli.w,fli.h); }
+  for(var sci of scorpions){ drawScorpionSprite(sci.x,sci.y,sci.dirX); }
 
-  // fleas — small brown bodies with six legs, hop downward
-  for(var fli of fleas){
-    ctx.fillStyle="#654";ctx.fillRect(fli.x-fli.w/2,fli.y-fli.h/2,fli.w,fli.h);
-    ctx.strokeStyle="#432";ctx.lineWidth=.6;
-    var fleg=0.8;
-    for(var fli2=0;fli2<3;fli2++){
-      var flx=fli.x-fli.w/2+2+fli2*4, fly=fli.y;
-      ctx.beginPath();ctx.moveTo(flx,fly-1);ctx.lineTo(flx+fleg,fly-5);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(flx,fly+1);ctx.lineTo(flx+fleg,fly+5);ctx.stroke();
-    }
-    ctx.fillStyle="#321";ctx.fillRect(fli.x-2,fli.y-1,1,1);ctx.fillRect(fli.x+1,fli.y-1,1,1);
-  }
-
-  // scorpions — procedural purple body with pincers, legs, and stinger tail
-  for(var sci of scorpions){
-    var sx=sc.x, sy=sc.y;
-    ctx.fillStyle="#639";ctx.fillRect(sx-8,sy-5,16,10);
-    ctx.fillStyle="#74a";ctx.fillRect(sx-12,sy-3,4,6);
-    ctx.strokeStyle="#96c";ctx.lineWidth=.6;
-    for(var sli=0;sli<4;sli++){
-      var slx=sx-5+sli*4, sly=sy;
-      ctx.beginPath();ctx.moveTo(slx,sly-1);ctx.lineTo(slx+2,sly-6);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(slx,sly+1);ctx.lineTo(slx+2,sly+6);ctx.stroke();
-    }
-    var pDir = sc.dirX > 0 ? -1 : 1;
-    ctx.strokeStyle="#a8f";ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(sx+pDir*7,sy-4);ctx.lineTo(sx+pDir*13,sy-7);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(sx+pDir*7,sy+4);ctx.lineTo(sx+pDir*13,sy+7);ctx.stroke();
-    ctx.strokeStyle="#b9f";ctx.lineWidth=.8;
-    ctx.beginPath();ctx.moveTo(sx-sci.dirX*8,sy);ctx.quadraticCurveTo(sx-sci.dirX*14,sy-6,sx-sci.dirX*16,sy-2);ctx.stroke();
-    ctx.fillStyle="#d0f";ctx.fillRect(sx-sci.dirX*17,sy-3,2,2);
-  }
-
-  // bullets — yellow (regular) or purple (poisoned) sparks
   for(var b of bullets){
     ctx.fillStyle=b.poisoned?"#a6f":"#ff6"; ctx.beginPath();ctx.arc(b.x,b.y+3,3,0,Math.PI*2);ctx.fill()
   }
 
-  // player ship (blue with glow, flashes when invincible)
-  var pAlpha = player.invT > 0 ? (Math.floor(player.invT/150)%2===0?0.3:1) : 1;
-  ctx.globalAlpha=pAlpha;
-  ctx.strokeStyle="#9cf"; ctx.lineWidth=1; ctx.strokeRect(player.x-14,player.y,28,8);
-  ctx.fillStyle="#3af"; ctx.fillRect(player.x-14,player.y,28,8);
-  ctx.globalAlpha=1;
-
-  // particles — drawn after entities so they are visible
+  drawPlayerSprite(player.x,player.y,player.invT);
   drawFx();
-
-  // screen-flash overlay (on top of all game entities and particles)
   drawFlash();
   drawWaveBanner();
+  drawPopups();
+  drawCrtOverlay();
 }
 
 // --- HUD ---
 function updateHUD(){
-  if(score>=nextExtraLife && lives<6){ lives++; nextExtraLife+=12000; playSfx("wave_transition"); }
+  if(score>=nextExtraLife && lives<6){ lives++; nextExtraLife+=12000; playSfx("extra_life"); spawnPopup(player.x,player.y-10,"1UP","#0f0"); }
   if(score>highScore){highScore=score;try{localStorage.setItem("cenitpede_hs",String(highScore))}catch(e){}}
   hudSc.textContent=score;hudLv.textContent=lives;hudWg.textContent=wave;
   document.getElementById("hs").textContent=highScore;
