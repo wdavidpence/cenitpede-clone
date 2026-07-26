@@ -86,19 +86,19 @@ var SHOT_COOLDOWN = 350;    // ms between shots for balance
 var lastShotTime=0;         // timestamp of last fireBullet() call
 var SPIDER_HUNT_RANGE = 150;
 var SPIDER_SPEED = 2.2;
-var SPIDER_SCORE = 75;
 var FLEA_SPAWN_INTERVAL = 900;
 var FLEA_SPEED = 3.5;
-var FLEA_SCORE = 100;
+var FLEA_SCORE = 200;
 var FLEA_MAX = 2;
 var SCORPION_SPAWN_INTERVAL = 1200; // frames (~19.2s at 60fps)
 var SCORPION_SPEED = 1.8;
-var SCORPION_SCORE = 500;
+var SCORPION_SCORE = 1000;
 // --- lower third of playfield: upper bound of the mushroom-free player zone ---
 var PLAYER_ZONE_TOP = Math.floor(H * 2/3);
 
 var score   = 0;
 var lives   = 3;
+var nextExtraLife = 12000;
 var wave    = 1;
 var gameOver= false;
 try{var hs=parseInt(localStorage.getItem("cenitpede_hs")||"0",10);if(isNaN(hs))hs=0}catch(e){hs=0}var highScore=hs;
@@ -225,7 +225,7 @@ function rectHit(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a
 (function(){
   fbBtn.addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation();fireBullet();});
   fbBtn.addEventListener("click",function(){fireBullet();});
-  document.addEventListener("keydown",function(e){if(e.key==="z"||e.key==="Z"){e.preventDefault();fireBullet();}});
+  document.addEventListener("keydown",function(e){if(e.key==="z"||e.key==="Z"||e.key===" "){e.preventDefault();fireBullet();}});
 })();
 
 // --- overlay: tap to start/restart ---
@@ -248,10 +248,10 @@ function fireBullet(){
       if(Math.sqrt(dx*dx+dy*dy)<MUSH_CW*1.5){ poisoned=true; break; }
     }
   }
-  var bSpd=poisoned?4:6.5, spread=0.34;
+  var bSpd=poisoned?4:6.5, spread=0.34, wingOff=6;
   bullets.push({x:player.x, y:player.y-4, w:6, h:10, dx:0, dy:-bSpd, spd:bSpd, poisoned:poisoned, pTimer:0});
-  bullets.push({x:player.x, y:player.y-4, w:6, h:10, dx:-bSpd*spread, dy:-bSpd*0.94, spd:bSpd, poisoned:poisoned, pTimer:0});
-  bullets.push({x:player.x, y:player.y-4, w:6, h:10, dx:bSpd*spread, dy:-bSpd*0.94, spd:bSpd, poisoned:poisoned, pTimer:0});
+  bullets.push({x:player.x-wingOff, y:player.y-4, w:6, h:10, dx:-bSpd*spread, dy:-bSpd*0.94, spd:bSpd, poisoned:poisoned, pTimer:0});
+  bullets.push({x:player.x+wingOff, y:player.y-4, w:6, h:10, dx:bSpd*spread, dy:-bSpd*0.94, spd:bSpd, poisoned:poisoned, pTimer:0});
   lastShotTime = now;
   playSfx("fire");
 }
@@ -300,8 +300,9 @@ function playSfx(name){
         gain.gain.linearRampToValueAtTime(0, now+dur*1.2);
         break;
       case "wave_transition":
-        osc.type="sine"; osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(600, now+dur*0.7);
+        var wBase=300+wave*25, wPeak=Math.min(wBase*2,900);
+        osc.type="sine"; osc.frequency.setValueAtTime(wBase, now);
+        osc.frequency.exponentialRampToValueAtTime(wPeak, now+dur*0.7);
         gain.gain.setValueAtTime(vol, now);
         gain.gain.linearRampToValueAtTime(0, now+dur*1.5);
         break;
@@ -325,8 +326,8 @@ function startGame(){
   player.x=160; player.y=Math.max(PLAYER_ZONE_TOP,H-24); player.invT=0;
   bullets=[]; mush=[]; centi=[]; fleas=[]; spiders=[]; scorpions=[];
   fxPars=[];
-  score=0; lives=3; wave=1; spiderSpawnTimer=0; fleaSpawnTimer=0; scorpionSpawnTimer=0; lastShotTime=0;
-  centiSpawned=0; centiTarget=Math.min(wave*5+(wave-1)*2,40);
+  score=0; lives=3; wave=1; nextExtraLife=12000; spiderSpawnTimer=0; fleaSpawnTimer=0; scorpionSpawnTimer=0; lastShotTime=0;
+  centiSpawned=0; centiTarget=Math.min(1+Math.floor(wave/4),4);
   ovrEl.style.display="none";
   document.getElementById("ovrMsg").style.display="none";
   var ov=document.getElementById("ovr");if(ov){ov.querySelector("h1").textContent="CENITPEDE";var mp=Array.from(ov.querySelectorAll("p")).find(function(p){return p.id!=="ovrMsg"});if(mp)mp.textContent="TAP SCREEN TO START";}
@@ -350,7 +351,7 @@ function startNextWave(){
   wave++;
   centiSpawned=0;
   // difficulty scales with wave: more segments, faster speed
-  centiTarget = Math.min(wave * 5 + (wave-1)*2, 40);
+  centiTarget = Math.min(1+Math.floor(wave/4),4);
   hudWg.textContent = wave;
   waveBannerT=60;
 }
@@ -358,12 +359,12 @@ function startNextWave(){
 // --- spawn one centipede wave (all segments at once) ---
 function spawnWaveCenti(){
   if(centiSpawned >= centiTarget) return;
-  var segCount = Math.min(wave * 2 + 3, 18);
+  var segCount = Math.min(11 + wave, 18);
   var headY = -8;
   // descend one row every few waves for variety
   if(wave > 1 && centiSpawned % 3 === 0) headY += 8;
     centi.push({
-      segments:[], dirX: 1, speed: Math.min(0.9 + wave*0.12, 3.5), t:0, alive:true, mushTurnCooldown: 0,
+      segments:[], dirX: 1, speed: Math.min(0.5 + wave*0.1 + Math.max(0,wave-3)*0.06, 3.5), t:0, alive:true, mushTurnCooldown: 0,
       x: rnd(-24,W+24), y: headY
     });
   var last = centi[centi.length-1];
@@ -455,7 +456,7 @@ function update(dt){
     // bullet hits mushroom → destroy + spawn two smaller replacements in same row (staggered)
     for(var j=bullets.length-1;j>=0;j--){
       var b=bullets[j]; if(rectHit(b,m)){
-        bullets.splice(j,1); score+=5; playSfx("mushroom_hit"); updateHUD(); triggerFlash("#fff"); spawnBurst(m.x,m.y,"#ff9",8);
+        bullets.splice(j,1); score+=1; playSfx("mushroom_hit"); updateHUD(); triggerFlash("#fff"); spawnBurst(m.x,m.y,"#ff9",8);
         // remove current large mushroom from mush array (splice by index i)
         mush.splice(i,1);
         var rowY = MUSH_OFF_Y + m.gR * MUSH_CH;
@@ -547,13 +548,13 @@ function update(dt){
         for(var sk=c.segments.length-1;sk>=0;sk--){
           var seg=c.segments[sk];
           if(rectHit(b,seg)){
-            bullets.splice(bi,1); score+=50; playSfx("enemy_hit"); updateHUD();
+            bullets.splice(bi,1); score+=(sk===0?100:10); playSfx("enemy_hit"); updateHUD();
             spawnBurst(seg.x, seg.y, "#af5", 6); // bullet-hit feedback
             triggerFlash("#fff");                // white flash on hit
           c.segments.splice(sk,1);
           centi.push({
-            segments:[{x:seg.x+wave*4, y:Math.max(40,H/2), w:seg.w, h:seg.h}],
-            dirX: 1, speed: 0.8, t:0, alive:true, mushTurnCooldown: 0, x: seg.x+wave*4, y: Math.max(40,H/2)
+            segments:[{x:seg.x, y:Math.max(40,H/2), w:seg.w, h:seg.h}],
+            dirX: 1, speed: Math.min(0.5+wave*0.1+Math.max(0,wave-3)*0.06, 3.5), t:0, alive:true, mushTurnCooldown: 0, x: seg.x, y: Math.max(40,H/2)
           });
           break; // bullet consumed, stop checking this bullet
         }
@@ -607,7 +608,9 @@ function update(dt){
     for(var bi2=bullets.length-1;bi2>=0;bi2--){
       var b2=bullets[bi2]; if(!b2) continue;
       if(rectHit(b2,sp)){
-        bullets.splice(bi2,1); playSfx("enemy_hit"); spiders.splice(si,1); score+=SPIDER_SCORE; updateHUD(); spawnBurst(sp.x, sp.y, "#a7d", 6); break;
+        var spiderDist=Math.abs(player.y-sp.y);
+        var spiderPts=spiderDist>=64?300:spiderDist>=22?600:900;
+        bullets.splice(bi2,1); playSfx("enemy_hit"); spiders.splice(si,1); score+=spiderPts; updateHUD(); spawnBurst(sp.x, sp.y, "#a7d", 6); break;
       }
     }
     // player hits spider -> lose life (respawn when lives remain, game over otherwise)
@@ -841,6 +844,7 @@ function drawGame(){
 
 // --- HUD ---
 function updateHUD(){
+  if(score>=nextExtraLife && lives<6){ lives++; nextExtraLife+=12000; playSfx("wave_transition"); }
   if(score>highScore){highScore=score;try{localStorage.setItem("cenitpede_hs",String(highScore))}catch(e){}}
   hudSc.textContent=score;hudLv.textContent=lives;hudWg.textContent=wave;
   document.getElementById("hs").textContent=highScore;
