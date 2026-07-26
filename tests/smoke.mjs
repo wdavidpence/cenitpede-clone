@@ -166,4 +166,55 @@ assert(el3.granted === false && el3.lives === 6);  // cap at 6
 var el4 = extraLifeCheck(11000, 12000, 3);
 assert(el4.granted === false);  // threshold not reached
 
+// centipede split mechanic — authentic behavior
+function splitHeadHit(segments) {
+    return segments.slice(1);
+}
+function splitBodyHit(segments, hitIndex) {
+    var original = segments.slice(0, hitIndex);
+    var tail = segments.slice(hitIndex + 1);
+    return { original: original, tail: tail };
+}
+
+// head hit: removes head, rest stays in same group
+var h1 = splitHeadHit([1,2,3,4]);
+assert(h1.length === 3 && h1[0] === 2);
+var h2 = splitHeadHit([1]);
+assert(h2.length === 0);
+var h3 = splitHeadHit([1,2]);
+assert(h3.length === 1 && h3[0] === 2);
+
+// body hit in middle: splits into head group + tail group
+var b1 = splitBodyHit([1,2,3,4,5], 2);
+assert(b1.original.length === 2 && b1.tail.length === 2);
+assert(b1.tail[0] === 4);
+
+// body hit just after head
+var b2 = splitBodyHit([1,2,3,4], 1);
+assert(b2.original.length === 1 && b2.tail.length === 2);
+assert(b2.original[0] === 1 && b2.tail[0] === 3);
+
+// body hit at tail end: no tail group
+var b3 = splitBodyHit([1,2,3,4], 3);
+assert(b3.original.length === 3 && b3.tail.length === 0);
+
+// body hit at second-to-last
+var b4 = splitBodyHit([1,2,3], 2);
+assert(b4.original.length === 2 && b4.tail.length === 0);
+
+// cleanup removes empty and null groups
+function cleanupTest(groups) {
+    var result = [];
+    for (var i = groups.length - 1; i >= 0; i--) {
+        var g = groups[i];
+        if (!g || !g.segments || g.segments.length === 0) continue;
+        result.push(g);
+    }
+    return result;
+}
+var ct1 = cleanupTest([{segments:[1,2]}, null, {segments:[]}, {segments:[3]}]);
+assert(ct1.length === 2);
+var ct2 = cleanupTest([]);
+assert(ct2.length === 0);
+
 console.log("PASS");
