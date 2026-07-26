@@ -248,7 +248,10 @@ function fireBullet(){
       if(Math.sqrt(dx*dx+dy*dy)<MUSH_CW*1.5){ poisoned=true; break; }
     }
   }
-  bullets.push({x:player.x, y:player.y-4, w:6, h:10, spd:poisoned?4:6.5, poisoned:poisoned, pTimer:0});
+  var bSpd=poisoned?4:6.5, spread=0.34;
+  bullets.push({x:player.x, y:player.y-4, w:6, h:10, dx:0, dy:-bSpd, spd:bSpd, poisoned:poisoned, pTimer:0});
+  bullets.push({x:player.x, y:player.y-4, w:6, h:10, dx:-bSpd*spread, dy:-bSpd*0.94, spd:bSpd, poisoned:poisoned, pTimer:0});
+  bullets.push({x:player.x, y:player.y-4, w:6, h:10, dx:bSpd*spread, dy:-bSpd*0.94, spd:bSpd, poisoned:poisoned, pTimer:0});
   lastShotTime = now;
   playSfx("fire");
 }
@@ -327,8 +330,7 @@ function startGame(){
   ovrEl.style.display="none";
   document.getElementById("ovrMsg").style.display="none";
   var ov=document.getElementById("ovr");if(ov){ov.querySelector("h1").textContent="CENITPEDE";var mp=Array.from(ov.querySelectorAll("p")).find(function(p){return p.id!=="ovrMsg"});if(mp)mp.textContent="TAP SCREEN TO START";}
-  var lastT=performance.now(), acc=0;
-  loop();
+  lastT=performance.now(); acc=0;
 }
 
 // --- show game over overlay ---
@@ -425,6 +427,7 @@ function loop(){
   while(acc>TARGET){update(TARGET); acc-=TARGET;}
   drawGame();
 }
+loop();
 // --- update ---
 function update(dt){
   // player movement + invincibility timer
@@ -440,9 +443,9 @@ function update(dt){
 
   // bullets move up (poisoned bullets travel slower but don't destroy mushrooms)
   for(var i=bullets.length-1;i>=0;i--){
-    var b=bullets[i]; b.y-=b.spd;
+    var b=bullets[i]; b.x+=b.dx; b.y+=b.dy;
     if(b.poisoned){ b.pTimer = (b.pTimer||0) + 16; }
-    if(b.y<8 || (b.poisoned && b.pTimer>POISON_LIFE)) bullets.splice(i,1);
+    if(b.y<8 || b.x<-8 || b.x>W+8 || (b.poisoned && b.pTimer>POISON_LIFE)) bullets.splice(i,1);
   }
 
   spawnMush();
