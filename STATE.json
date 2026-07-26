@@ -16,7 +16,7 @@
     "status": "pass",
     "details": "Scorecard: syntax OK, smoke PASS, all9 gameplay markers present. Syntax check: inline JS compiles without error. Full manual audit: all spawn/update/render/collision/cleanup/scoring/game-state paths verified reachable. Smoke tests updated to cover authentic scoring values, spider distance-based scoring, extra life mechanic, centipede head vs body scoring, mushroom HP decrement/destruction/size-scaling, centipede nibble, mushroom regen after death."
   },
-  "last_commit": "pending",
+  "last_commit": "ec9b72e",
   "next_action": "Phase 2 remaining: implement authentic centipede split mechanic (hitting head creates independent head that moves to top, body segments behind become separate groups). Phase 3 remaining: authentic player speed (fast in all directions within bottom zone), tighter player zone (bottom 20% only). Phase 4 remaining: orientation lock, viewport-fit behavior audit on real device.",
   "pass_count": 3,
   "judge_review_due": false
