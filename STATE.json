@@ -16,7 +16,7 @@
     "status": "pass",
     "details": "Scorecard: syntax OK, smoke PASS, all9 gameplay markers present. Syntax check: inline JS compiles without error. Full manual audit: all spawn/update/render/collision/cleanup/scoring/game-state paths verified reachable. Smoke tests updated to cover authentic scoring values, spider distance-based scoring, extra life mechanic, centipede head vs body scoring."
   },
-  "last_commit": "0353882",
+  "last_commit": "f32a5bc",
   "next_action": "Phase 3 remaining: implement 4-hit mushroom destruction cycle (authentic), add mushroom regen after player death. Phase 2 remaining: implement independent centipede head spawning (1 per wave after wave1, authentic split mechanic). Phase 4 remaining: orientation lock, viewport-fit behavior audit on real device.",
   "pass_count": 2,
   "judge_review_due": false
