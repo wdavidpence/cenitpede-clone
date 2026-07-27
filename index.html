@@ -505,36 +505,23 @@ function update() {
     if (centipede.length > 0) {
         var head = centipede[0];
         
-        if (head.direction !== undefined) {
-            // Use stored direction for split centipedes
-        } else if (centiDirection === 1) {
-            head.x += head.speed * centiDirection;
-        } else {
-            head.x -= Math.abs(head.speed) * centiDirection;
-        }
+        // Simple direction-based movement (fix: was inverted when centiDirection=-1)
+        head.x += head.speed * centiDirection;
         
-        // Head direction control
+        // Head direction control - bounce off walls
         if (head.x > canvas.width - head.size) {
-            centiDirection = -1; // move left
+            centiDirection = -1; // move left next frame
         } else if (head.x < head.size) {
-            centiDirection = 1; // move right
+            centiDirection = 1; // move right next frame
         }
         
         // Move body segments to follow head in snake pattern
         for (var i = 1; i < centipede.length; i++) {
             var prev = centipede[i - 1];
-            curr = centipede[i];
             
-            // Body follows head with offset (snake descent)
-            curr.x = prev.x + Math.sin(i * 0.5 + Date.now() / 1000) * 8;
-            curr.y = prev.y + 25; // vertical spacing between body segments
-            
-            // If head hits wall, move all down
-            if (head.x > canvas.width - head.size) {
-                curr.y += 15; // drop down
-            } else if (head.x < head.size) {
-                curr.y += 15; // drop down
-            }
+            // Body follows head with snake-like oscillation
+            centipede[i].x = prev.x + Math.sin(i * 0.5 + Date.now() / 1000) * 8;
+            centipede[i].y = prev.y + 25; // vertical spacing between body segments
         }
         
         // Check if head reached bottom
