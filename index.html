@@ -6,18 +6,8 @@
     <title>Centipede</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            background: #000; 
-            overflow: hidden; 
-            touch-action: none;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        canvas { 
-            display: block; 
-            width: 100vw; 
-            height: 100vh;
-        }
+        body { background: #000; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; }
     </style>
 </head>
 <body>
@@ -27,7 +17,7 @@ const c = document.getElementById('c');
 const ctx = c.getContext('2d');
 
 // Game state
-let gameState = 'title'; // title, playing, gameover
+let gameState = 'title';
 let score = 0;
 let lives = 3;
 let wave = 1;
@@ -40,7 +30,7 @@ const bullets = [];
 const mushrooms = [];
 const centipede = [];
 
-// Audio context (lazy init)
+// Audio context
 let audioCtx = null;
 function initAudio() {
     if (!audioCtx) {
@@ -64,7 +54,7 @@ function playSound(freq, duration, type = 'square') {
 
 // Input handling
 const keys = {};
-let touchDir = 0; // -1 left, 0 none, 1 right
+let touchDir = 0;
 
 document.addEventListener('keydown', e => {
     if (['ArrowLeft','ArrowRight',' '].includes(e.key)) {
@@ -79,29 +69,18 @@ document.addEventListener('keyup', e => {
     }
 });
 
-// Touch controls - divide screen into 3 zones
+// Touch controls
 c.addEventListener('touchstart', e => {
     e.preventDefault();
     initAudio();
     
-    if (gameState === 'title') {
-        startGame();
-        return;
-    }
-    
-    if (gameState === 'gameover') {
-        resetGame();
-        return;
-    }
+    if (gameState === 'title') { startGame(); return; }
+    if (gameState === 'gameover') { resetGame(); return; }
     
     const touch = e.touches[0];
-    if (touch.clientX < c.width / 3) {
-        touchDir = -1;
-    } else if (touch.clientX > c.width * 2 / 3) {
-        touchDir = 1;
-    } else {
-        fire();
-    }
+    if (touch.clientX < c.width / 3) { touchDir = -1; }
+    else if (touch.clientX > c.width * 2 / 3) { touchDir = 1; }
+    else { fire(); }
 });
 
 c.addEventListener('touchend', e => {
@@ -109,38 +88,24 @@ c.addEventListener('touchend', e => {
     touchDir = 0;
 });
 
-// Mouse controls for desktop testing
+// Mouse controls
 c.addEventListener('mousedown', e => {
     initAudio();
     
-    if (gameState === 'title') {
-        startGame();
-        return;
-    }
+    if (gameState === 'title') { startGame(); return; }
+    if (gameState === 'gameover') { resetGame(); return; }
     
-    if (gameState === 'gameover') {
-        resetGame();
-        return;
-    }
-    
-    // Click center to shoot, left/right to move
-    if (e.clientX < c.width / 3) {
-        touchDir = -1;
-    } else if (e.clientX > c.width * 2 / 3) {
-        touchDir = 1;
-    } else {
-        fire();
-    }
+    if (e.clientX < c.width / 3) { touchDir = -1; }
+    else if (e.clientX > c.width * 2 / 3) { touchDir = 1; }
+    else { fire(); }
 });
 
 c.addEventListener('mouseup', () => { touchDir = 0; });
 
-// Initialize game
+// Initialize
 function resize() {
     c.width = window.innerWidth;
     c.height = window.innerHeight;
-    player.x = c.width / 2;
-    player.y = c.height - 60;
 }
 
 function initMushrooms() {
@@ -149,12 +114,7 @@ function initMushrooms() {
     for (let r = 0; r < Math.min(rows, 8); r++) {
         for (let col = 0; col < c.width / 35; col++) {
             if (Math.random() > 0.2) {
-                mushrooms.push({ 
-                    x: col * 35 + 17, 
-                    y: r * 35 + 40, 
-                    hp: 4,
-                    maxHp: 4
-                });
+                mushrooms.push({ x: col * 35 + 17, y: r * 35 + 40, hp: 4, maxHp: 4 });
             }
         }
     }
@@ -206,25 +166,19 @@ function update() {
     }
 
     // Auto-fire on space
-    if (keys[' ']) {
-        fire();
-    }
+    if (keys[' ']) { fire(); }
 
     // Update bullets
     for (let i = bullets.length - 1; i >= 0; i--) {
         bullets[i].y -= 8;
-        if (bullets[i].y < -10) {
-            bullets.splice(i, 1);
-        }
+        if (bullets[i].y < -10) { bullets.splice(i, 1); }
     }
 
     // Move centipede
     let moveDown = false;
     for (const s of centipede) {
         s.x += 1.2;
-        if (s.x > c.width - 10 || s.x < 10) {
-            moveDown = true;
-        }
+        if (s.x > c.width - 10 || s.x < 10) { moveDown = true; }
     }
     
     if (moveDown) {
@@ -281,7 +235,7 @@ function update() {
         }
     }
 
-    // Wave clear - check if all centipedes are gone and mushrooms are cleared
+    // Wave clear
     if (centipede.length === 0 && mushrooms.length < 5) {
         wave++;
         initCentipede();
@@ -295,7 +249,6 @@ function draw() {
     ctx.fillRect(0, 0, c.width, c.height);
 
     if (gameState === 'title') {
-        // Title screen
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 36px monospace';
         ctx.textAlign = 'center';
@@ -316,11 +269,9 @@ function draw() {
     for (const m of mushrooms) {
         const hpRatio = m.hp / m.maxHp;
         
-        // Stem
         ctx.fillStyle = '#f5deb3';
         ctx.fillRect(m.x - 4, m.y + 2, 8, 10);
         
-        // Cap (color fades with damage)
         const r = Math.floor(58 * hpRatio);
         const g = Math.floor(160 * hpRatio + 50 * (1 - hpRatio));
         const b = Math.floor(48 * hpRatio + 50 * (1 - hpRatio));
@@ -330,7 +281,6 @@ function draw() {
         ctx.arc(m.x, m.y - 2, 10, Math.PI, 0);
         ctx.fill();
         
-        // Spots
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.beginPath();
         ctx.arc(m.x - 4, m.y - 5, 2, 0, Math.PI * 2);
@@ -339,25 +289,22 @@ function draw() {
         ctx.fill();
     }
 
-    // Draw centipede (head first)
+    // Draw centipede
     for (let i = 0; i < centipede.length; i++) {
         const s = centipede[i];
         
         if (i === 0) {
-            // Head - larger, brighter red
             ctx.fillStyle = '#ff3020';
             ctx.beginPath();
             ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
             ctx.fill();
             
-            // Eyes
             ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.arc(s.x - 3, s.y - 2, 2.5, 0, Math.PI * 2);
             ctx.arc(s.x + 3, s.y - 2, 2.5, 0, Math.PI * 2);
             ctx.fill();
             
-            // Antennae
             ctx.strokeStyle = '#ff3020';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
@@ -367,14 +314,12 @@ function draw() {
             ctx.lineTo(s.x + 7, s.y - 10);
             ctx.stroke();
         } else {
-            // Body segments - alternating colors
             const color = i % 2 === 0 ? '#e84030' : '#c83020';
             ctx.fillStyle = color;
             ctx.beginPath();
             ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
             ctx.fill();
             
-            // Pattern on body
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath();
             ctx.arc(s.x - 2, s.y - 1, 2.5, 0, Math.PI * 2);
@@ -384,14 +329,12 @@ function draw() {
 
     // Draw bullets
     for (const b of bullets) {
-        // Bullet trail
         const gradient = ctx.createLinearGradient(b.x, b.y, b.x, b.y + 8);
         gradient.addColorStop(0, '#ffff00');
         gradient.addColorStop(1, 'rgba(255,255,0,0)');
         ctx.fillStyle = gradient;
         ctx.fillRect(b.x - 2, b.y, 4, 8);
         
-        // Bullet head
         ctx.fillStyle = '#fff';
         ctx.beginPath();
         ctx.arc(b.x, b.y - 2, 3, 0, Math.PI * 2);
@@ -400,15 +343,12 @@ function draw() {
 
     // Draw player
     if (gameState === 'playing') {
-        // Body
         ctx.fillStyle = '#0f0';
         ctx.fillRect(player.x - 12, player.y - 6, 24, 12);
         
-        // Turret
         ctx.fillStyle = '#0a0';
         ctx.fillRect(player.x - 4, player.y - 12, 8, 6);
         
-        // Tracks/wheels
         ctx.fillStyle = '#050';
         for (let i = -1; i <= 1; i++) {
             ctx.fillRect(player.x + i * 8 - 2, player.y + 6, 4, 3);
@@ -421,21 +361,6 @@ function draw() {
     ctx.fillText('Score: ' + score, 10, 25);
     ctx.fillText('Lives: ' + lives, 10, 45);
     ctx.fillText('Wave: ' + wave, 10, 65);
-
-    // Draw touch zones hint (subtle)
-    if (gameState === 'playing') {
-        ctx.fillStyle = 'rgba(255,255,255,0.03)';
-        ctx.fillRect(0, c.height - 80, c.width / 3, 80);
-        ctx.fillRect(c.width * 2 / 3, c.height - 80, c.width / 3, 80);
-        
-        ctx.fillStyle = 'rgba(255,255,255,0.1)';
-        ctx.font = '12px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('←', c.width / 6, c.height - 40);
-        ctx.fillText('●', c.width / 2, c.height - 40);
-        ctx.fillText('→', c.width * 5 / 6, c.height - 40);
-        ctx.textAlign = 'left';
-    }
 
     // Game over screen
     if (gameState === 'gameover') {
@@ -464,11 +389,8 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// Handle resize
-window.addEventListener('resize', resize);
-resize();
-
 // Start game loop
+resize();
 loop();
 </script>
 </body>
