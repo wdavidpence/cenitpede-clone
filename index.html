@@ -360,7 +360,7 @@ function update() {
     // Player movement
     if (keys['ArrowLeft']) { player.x -= player.speed; }
     if (keys['ArrowRight']) { player.x += player.speed; }
-    if (mouseDown) fireBullet();
+    if (mouseDown || keys[' ']) fireBullet();
     
     // Clamp player position
     player.x = Math.max(player.width, Math.min(canvas.width - player.width, player.x));
