@@ -410,22 +410,23 @@ function fireBullet(){
 }
 
 // --- audio manager (lazy Web Audio API, resumes from user gesture) ---
-var audioCtx = null;
+var audioCtx = null, audioMaster = null;
 function initAudio(){
   try{
     var Ctx = window.AudioContext || window.webkitAudioContext;
     if(Ctx){
       if(audioCtx && audioCtx.state === 'suspended'){ audioCtx.resume(); return; }
       if(!audioCtx) audioCtx = new Ctx();
+    audioMaster=audioCtx.createDynamicsCompressor(); audioMaster.threshold.setValueAtTime(-18,audioCtx.currentTime); audioMaster.knee.setValueAtTime(12,audioCtx.currentTime); audioMaster.ratio.setValueAtTime(5,audioCtx.currentTime); audioMaster.attack.setValueAtTime(0.003,audioCtx.currentTime); audioMaster.release.setValueAtTime(0.18,audioCtx.currentTime); audioMaster.connect(audioCtx.destination);
     }
   }catch(e){}
 }
 function playSfx(name){
-  if(!audioCtx) return;
+  if(!audioCtx){initAudio();} if(!audioCtx) return;
   try{
     var ctx = audioCtx, now = ctx.currentTime;
     var osc = ctx.createOscillator(), gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(audioMaster||ctx.destination);
     switch(name){
       case "fire":
         osc.type="sawtooth"; osc.frequency.setValueAtTime(800, now);
@@ -464,7 +465,7 @@ function playSfx(name){
         gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.18);
         osc.start(now); osc.stop(now+0.18);
         var osc2=ctx.createOscillator(),g2=ctx.createGain();
-        osc2.connect(g2);g2.connect(ctx.destination);
+        osc2.connect(g2);g2.connect(audioMaster||ctx.destination);
         osc2.type="sine";osc2.frequency.setValueAtTime(1200,now+0.03);
         osc2.frequency.exponentialRampToValueAtTime(400,now+0.18);
         g2.gain.setValueAtTime(0.12,now+0.03);g2.gain.exponentialRampToValueAtTime(0.001,now+0.2);
@@ -482,7 +483,7 @@ function playSfx(name){
         gain.gain.setValueAtTime(0.22, now); gain.gain.exponentialRampToValueAtTime(0.001, now+0.2);
         osc.start(now); osc.stop(now+0.2);
         var o3=ctx.createOscillator(),g3=ctx.createGain();
-        o3.connect(g3);g3.connect(ctx.destination);
+        o3.connect(g3);g3.connect(audioMaster||ctx.destination);
         o3.type="sine";o3.frequency.setValueAtTime(1500,now+0.08);
         o3.frequency.exponentialRampToValueAtTime(500,now+0.22);
         g3.gain.setValueAtTime(0.1,now+0.08);g3.gain.exponentialRampToValueAtTime(0.001,now+0.25);
@@ -519,13 +520,13 @@ function playSfx(name){
   }catch(e){}
 }
 function playGameJingle(){
-  if(!audioCtx) return;
+  if(!audioCtx){initAudio();} if(!audioCtx) return;
   try{
     var ctx=audioCtx,now=ctx.currentTime;
     var notes=[880,740,620,520,440,370];
     for(var ni=0;ni<notes.length;ni++){
       var o=ctx.createOscillator(),g=ctx.createGain();
-      o.connect(g);g.connect(ctx.destination);
+      o.connect(g);g.connect(audioMaster||ctx.destination);
       o.type="triangle";o.frequency.setValueAtTime(notes[ni],now+ni*0.13);
       g.gain.setValueAtTime(0,now+ni*0.13);
       g.gain.linearRampToValueAtTime(0.13,now+ni*0.13+0.02);
