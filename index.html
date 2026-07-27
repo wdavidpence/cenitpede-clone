@@ -12,56 +12,52 @@ canvas { display: block; margin: 0 auto; background: #1a0a2e; }
 <body>
 <canvas id="game"></canvas>
 <script>
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+// All variables MUST be global - no IIFE, no let/const in function scope that shadows globals
+var gameState = 'title';
+var score = 0;
+var lives = 3;
 
-canvas.width = 800;
-canvas.height = 600;
+var player = { x: 400, y: 550, width: 30, height: 20 };
 
-let gameState = 'title';
-let score = 0;
-let lives = 3;
-
-const player = { x: 400, y: 550, width: 30, height: 20 };
-let bullets = [];
-
-const mushrooms = [];
-for (let row = 0; row < 8; row++) {
-    for (let col = 0; col < 15; col++) {
+var bullets = [];
+var mushrooms = [];
+for (var row = 0; row < 8; row++) {
+    for (var col = 0; col < 15; col++) {
         if (Math.random() > 0.3) {
             mushrooms.push({ x: col * 55 + 27, y: row * 60 + 40, hp: 3 });
         }
     }
 }
 
-let centipede = [];
+var centipede = [];
 function createCentipede() {
-    centipede = [];
-    for (let i = 0; i < 12; i++) {
+    centipede.length = 0;
+    for (var i = 0; i < 12; i++) {
         centipede.push({ x: 300 + i * 25, y: 50 });
     }
 }
 
-const keys = {};
-document.addEventListener('keydown', (e) => { 
-    if (['ArrowLeft','ArrowRight',' '].includes(e.key)) {
+var keys = {};
+document.addEventListener('keydown', function(e) { 
+    if (['ArrowLeft','ArrowRight',' '].indexOf(e.key) >= 0) {
         keys[e.key] = true; 
     }
 });
-document.addEventListener('keyup', (e) => { 
-    if (['ArrowLeft','ArrowRight',' '].includes(e.key)) {
+document.addEventListener('keyup', function(e) { 
+    if (['ArrowLeft','ArrowRight',' '].indexOf(e.key) >= 0) {
         keys[e.key] = false; 
     }
 });
 
-canvas.addEventListener('click', () => {
-    if (gameState === 'title') {
-        startGame();
-    } else if (gameState === 'playing') {
-        fire();
-    } else if (gameState === 'gameover') {
-        startGame();
-    }
+var canvas = document.getElementById('game');
+var ctx = canvas.getContext('2d');
+canvas.width = 800;
+canvas.height = 600;
+
+canvas.addEventListener('click', function() {
+    if (gameState === 'title') startGame();
+    else if (gameState === 'playing') fire();
+    else if (gameState === 'gameover') startGame();
 });
 
 function fire() {
@@ -73,45 +69,40 @@ function startGame() {
     gameState = 'playing';
     score = 0;
     lives = 3;
-    bullets = [];
+    bullets.length = 0;
     createCentipede();
 }
 
 function update() {
     if (gameState !== 'playing') return;
 
-    // Player movement - check both string keys and boolean values
-    if (keys['ArrowLeft'] || keys.ArrowLeft) player.x = Math.max(0, player.x - 5);
-    if (keys['ArrowRight'] || keys.ArrowRight) player.x = Math.min(canvas.width - player.width, player.x + 5);
+    if (keys['ArrowLeft']) player.x = Math.max(0, player.x - 5);
+    if (keys['ArrowRight']) player.x = Math.min(canvas.width - player.width, player.x + 5);
 
-    // Auto-fire on space
-    if (keys[' '] || keys.Space) fire();
+    if (keys[' ']) fire();
 
-    // Update bullets
-    for (let i = bullets.length - 1; i >= 0; i--) {
+    for (var i = bullets.length - 1; i >= 0; i--) {
         bullets[i].y -= 8;
         if (bullets[i].y < 0) bullets.splice(i, 1);
     }
 
-    // Move centipede
-    let moveDown = false;
-    for (let i = 0; i < centipede.length; i++) {
+    var moveDown = false;
+    for (var i = 0; i < centipede.length; i++) {
         centipede[i].x += 2;
         if (centipede[i].x > canvas.width - 30 || centipede[i].x < 30) moveDown = true;
     }
 
     if (moveDown) {
-        for (let i = 0; i < centipede.length; i++) {
+        for (var i = 0; i < centipede.length; i++) {
             if (centipede[i].x > canvas.width - 30) centipede[i].x = canvas.width - 30;
             if (centipede[i].x < 30) centipede[i].x = 30;
             centipede[i].y += 20;
         }
     }
 
-    // Bullet vs centipede collision
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        for (let j = centipede.length - 1; j >= 0; j--) {
-            const dist = Math.hypot(bullets[i].x - centipede[j].x, bullets[i].y - centipede[j].y);
+    for (var i = bullets.length - 1; i >= 0; i--) {
+        for (var j = centipede.length - 1; j >= 0; j--) {
+            var dist = Math.hypot(bullets[i].x - centipede[j].x, bullets[i].y - centipede[j].y);
             if (dist < 20) { 
                 bullets.splice(i, 1); 
                 centipede.splice(j, 1); 
@@ -121,10 +112,9 @@ function update() {
         }
     }
 
-    // Bullet vs mushroom collision
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        for (let j = mushrooms.length - 1; j >= 0; j--) {
-            const dist = Math.hypot(bullets[i].x - mushrooms[j].x, bullets[i].y - mushrooms[j].y);
+    for (var i = bullets.length - 1; i >= 0; i--) {
+        for (var j = mushrooms.length - 1; j >= 0; j--) {
+            var dist = Math.hypot(bullets[i].x - mushrooms[j].x, bullets[i].y - mushrooms[j].y);
             if (dist < 20) { 
                 bullets.splice(i, 1); 
                 mushrooms[j].hp--; 
@@ -134,9 +124,8 @@ function update() {
         }
     }
 
-    // Player vs centipede collision
-    for (let i = 0; i < centipede.length; i++) {
-        const dist = Math.hypot(player.x - centipede[i].x, player.y - centipede[i].y);
+    for (var i = 0; i < centipede.length; i++) {
+        var dist = Math.hypot(player.x - centipede[i].x, player.y - centipede[i].y);
         if (dist < 25) { 
             lives--; 
             if (lives <= 0) gameState = 'gameover';
@@ -144,7 +133,6 @@ function update() {
         }
     }
 
-    // Wave clear
     if (centipede.length === 0) { 
         createCentipede(); 
         score += 100;
@@ -164,40 +152,34 @@ function draw() {
         return;
     }
 
-    // Draw mushrooms
     ctx.fillStyle = '#8b4513';
-    for (let m of mushrooms) { 
+    for (var i = 0; i < mushrooms.length; i++) { 
         ctx.beginPath(); 
-        ctx.arc(m.x, m.y, 15, 0, Math.PI * 2); 
+        ctx.arc(mushrooms[i].x, mushrooms[i].y, 15, 0, Math.PI * 2); 
         ctx.fill(); 
     }
 
-    // Draw centipede
     ctx.fillStyle = '#ff0000';
-    for (let i = 0; i < centipede.length; i++) { 
+    for (var i = 0; i < centipede.length; i++) { 
         ctx.beginPath(); 
         ctx.arc(centipede[i].x, centipede[i].y, 12, 0, Math.PI * 2); 
         ctx.fill(); 
     }
 
-    // Draw bullets
     ctx.fillStyle = '#ffff00';
-    for (let b of bullets) { 
-        ctx.fillRect(b.x - 2, b.y, 4, 10); 
+    for (var i = 0; i < bullets.length; i++) { 
+        ctx.fillRect(bullets[i].x - 2, bullets[i].y, 4, 10); 
     }
 
-    // Draw player
     ctx.fillStyle = '#00ff00';
     ctx.fillRect(player.x - player.width / 2, player.y - player.height / 2, player.width, player.height);
 
-    // Draw UI
     ctx.fillStyle = '#fff';
     ctx.font = '20px Arial';
     ctx.textAlign = 'left';
     ctx.fillText('Score: ' + score, 10, 30);
     ctx.fillText('Lives: ' + lives, 10, 60);
 
-    // Game over
     if (gameState === 'gameover') {
         ctx.fillStyle = '#ff0000';
         ctx.font = '48px Arial';
@@ -206,7 +188,6 @@ function draw() {
     }
 }
 
-// Game loop - this was missing!
 function gameLoop() { 
     update(); 
     draw(); 
