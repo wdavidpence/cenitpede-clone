@@ -12,12 +12,12 @@ body{overflow:hidden;-webkit-tap-highlight-color:transparent}
 canvas{display:block;background:#1a4927}
 #hud{padding:calc(8px+env(safe-area-inset-top,0px)) calc(8px+env(safe-area-inset-right,0px)) 60px calc(8px+env(safe-area-inset-left,0px));background:rgba(0,0,0,.5);display:flex;justify-content:space-between;font-size:13px;z-index:3}
 #touch{position:absolute;left:calc(4px+env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);z-index:3;display:none}
-@media(hover:hover){#touch{display:none!important}}
+@media(hover:hover and not(coarse-pointer)){#touch{display:none}}
 .joystickArea{position:absolute;left:calc(8px+env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);width:140px;height:140px;border-radius:50%;background:rgba(20,30,60,.35);border:2px solid rgba(100,180,255,.25);touch-action:none;cursor:none}
 .joystickArea::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;border-radius:50%;background:rgba(30,60,120,.4);border:2px solid rgba(80,160,255,.3)}
 .joystickThumb{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:rgba(100,180,255,.65);border:2px solid rgba(180,220,255,.7);cursor:pointer;transition:box-shadow .15s}
 .joystickThumb:active{background:rgba(140,220,255,.85);box-shadow:0 0 16px rgba(60,160,255,.5)}
-.fireBtn{position:absolute;width:72px;height:72px;top:calc(50%-36px);right:-80px;background:rgba(220,40,40,.35);border:2px solid rgba(255,70,70,.3);color:white;font-size:16px;display:flex;align-items:center;justify-content:center;border-radius:8px;-webkit-appearance:none;cursor:pointer;touch-action:none}
+.fireBtn{position:absolute;width:72px;height:72px;top:calc(50% - 36px);right:-80px;background:rgba(220,40,40,.35);border:2px solid rgba(255,70,70,.3);color:white;font-size:16px;display:flex;align-items:center;justify-content:center;border-radius:8px;-webkit-appearance:none;cursor:pointer;touch-action:none}
 .fireBtn:active{background:rgba(240,60,60,.55);box-shadow:inset 0 0 12px rgba(255,70,70,.3)}
 #ovr{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.7);z-index:4;color:#fff;font-size:20px;text-align:center;padding:30px}
 #ovr h1{font-size:40px;margin-bottom:16px;color:#f99;letter-spacing:6px;animation:arcadePulse 2.8s ease-in-out infinite}
@@ -43,8 +43,10 @@ canvas{display:block;background:#1a4927}
 <div id="hud"><span>SCORE <b id="sc">0</b></span><span>LIVES <b id="lv">3</b></span><span>WAVE <b id="wg">1</b></span><span>HIGH <b id="hs">0</b></span></div>
 <div id="touch">
   <div class="dpad">
-    <div class="joystickArea"><div class="joystickThumb"></div></div>
-    <button class="fireBtn" id="fb">FIRE</button>
+    <div class="joystickArea" tabindex="-1" aria-label="Joystick control — use arrow keys or touch to move">
+  <div class="joystickThumb" role="slider" aria-valuemin="0" aria-valuemax="48" aria-valuenow="0" aria-orientation="horizontal"></div>
+</div>
+    <button class="fireBtn" id="fb" aria-label="Fire weapon">FIRE</button>
 </div>
 </div>
 <div id="ovr"><h1>CENITPEDE</h1><p id="start-prompt">TAP SCREEN TO START</p><p id="ovrMsg" style="font-size:15px;color:#ff9;margin-top:12px;display:none"></p><p style="font-size:12px;color:#aaa;margin-top:18px;">ARROWS MOVE &middot; Z or SPACE to FIRE</p></div>
@@ -534,22 +536,11 @@ function playGameJingle(){
 }
 
 // --- orientation lock (portrait-primary, graceful fallback) ---
-function lockPortrait(){
-  try{
-    if(screen.orientation && screen.orientation.lock){
-      screen.orientation.lock("portrait-primary").catch(function(){});
-    }
-  }catch(e){}
-}
-
+var ovrMsg=document.getElementById("ovrMsg");
+function setStatus(msg){if(ovrMsg){ovrMsg.style.display="block";ovrMsg.textContent=msg;}}
+function lockPortrait(){try{if(screen.orientation&&screen.orientation.lock){var p=screen.orientation.lock("portrait-primary");if(p&&p.catch)p.catch(function(){setStatus("Orientation lock unavailable")});}}catch(e){setStatus("Orientation lock unsupported")}}
 // --- fullscreen request (iOS Safari needs user-gesture context) ---
-function requestFullscreen(){
-  try{
-    var el=document.documentElement;
-    var r=el.requestFullscreen||el.webkitRequestFullscreen;
-    if(r) r.call(el);
-  }catch(e){}
-}
+function requestFullscreen(){try{var el=document.documentElement;var r=el.requestFullscreen||el.webkitRequestFullscreen;if(r){var p=r.call(el);if(p&&p.catch)p.catch(function(){setStatus("Fullscreen unavailable")});}}catch(e){setStatus("Fullscreen unavailable")}}
 
 // --- start / restart game ---
 function startGame(){
