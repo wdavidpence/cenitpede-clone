@@ -13,428 +13,434 @@ canvas { display: block; width: 100vw; height: 100vh; }
 <body>
 <canvas id="c"></canvas>
 <script>
-"use strict";
+(function() {
+    "use strict";
 
-var c = document.getElementById("c");
-var ctx = c.getContext("2d");
+    var c = document.getElementById("c");
+    var ctx = c.getContext("2d");
 
-// Game state
-var gameState = "title"; // title, playing, gameover
-var score = 0;
-var lives = 3;
-var wave = 1;
+    // Game state
+    var gameState = "title";
+    var score = 0;
+    var lives = 3;
+    var wave = 1;
 
-// Player
-var player = { x: 0, y: 0, width: 24, height: 16 };
+    // Player
+    var player = { x: 0, y: 0, width: 24, height: 16 };
 
-// Game objects
-var bullets = [];
-var mushrooms = [];
-var centipede = [];
+    // Game objects
+    var bullets = [];
+    var mushrooms = [];
+    var centipede = [];
 
-// Audio context (lazy init)
-var audioCtx = null;
+    // Audio context
+    var audioCtx = null;
 
-function initAudio() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function initAudio() {
+        if (!audioCtx) {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            } catch(e) {
+                console.log("Audio not available");
+            }
+        }
     }
-}
 
-function playSound(freq, duration, type) {
-    if (!audioCtx) return;
-    var osc = audioCtx.createOscillator();
-    var gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.frequency.value = freq;
-    osc.type = type || "square";
-    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-    osc.start();
-    osc.stop(audioCtx.currentTime + duration);
-}
+    function playSound(freq, duration, type) {
+        if (!audioCtx) return;
+        try {
+            var osc = audioCtx.createOscillator();
+            var gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            osc.type = type || "square";
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        } catch(e) {
+            console.log("Sound error:", e.message);
+        }
+    }
 
-// Input handling
-var keys = {};
-var touchDir = 0; // -1 left, 0 none, 1 right
+    // Input handling
+    var keys = {};
+    var touchDir = 0;
 
-document.addEventListener("keydown", function(e) {
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === " ") {
-        keys[e.key] = true;
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === " ") {
+            keys[e.key] = true;
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener("keyup", function(e) {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === " ") {
+            keys[e.key] = false;
+        }
+    });
+
+    // Touch controls
+    c.addEventListener("touchstart", function(e) {
         e.preventDefault();
-    }
-});
+        initAudio();
 
-document.addEventListener("keyup", function(e) {
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === " ") {
-        keys[e.key] = false;
-    }
-});
-
-// Touch controls - divide screen into 3 zones
-c.addEventListener("touchstart", function(e) {
-    e.preventDefault();
-    initAudio();
-
-    if (gameState === "title") {
-        startGame();
-        return;
-    }
-
-    if (gameState === "gameover") {
-        resetGame();
-        return;
-    }
-
-    var touch = e.touches[0];
-    if (touch.clientX < c.width / 3) {
-        touchDir = -1;
-    } else if (touch.clientX > c.width * 2 / 3) {
-        touchDir = 1;
-    } else {
-        fire();
-    }
-});
-
-c.addEventListener("touchend", function(e) {
-    e.preventDefault();
-    touchDir = 0;
-});
-
-// Mouse controls - use mousedown on window to catch all clicks
-window.addEventListener("mousedown", function(e) {
-    initAudio();
-
-    if (gameState === "title") {
-        startGame();
-        return;
-    }
-
-    if (gameState === "gameover") {
-        resetGame();
-        return;
-    }
-
-    if (e.clientX < c.width / 3) {
-        touchDir = -1;
-    } else if (e.clientX > c.width * 2 / 3) {
-        touchDir = 1;
-    } else {
-        fire();
-    }
-});
-
-window.addEventListener("mouseup", function() {
-    touchDir = 0;
-});
-
-// Initialize
-function resize() {
-    c.width = window.innerWidth;
-    c.height = window.innerHeight;
-}
-
-function initMushrooms() {
-    mushrooms.length = 0;
-    var rows = Math.floor(c.height / 35);
-    for (var r = 0; r < Math.min(rows, 8); r++) {
-        for (var col = 0; col < c.width / 35; col++) {
-            if (Math.random() > 0.2) {
-                mushrooms.push({ x: col * 35 + 17, y: r * 35 + 40, hp: 4, maxHp: 4 });
-            }
-        }
-    }
-}
-
-function initCentipede() {
-    centipede.length = 0;
-    var n = Math.min(12 + wave * 3, 25);
-    for (var i = 0; i < n; i++) {
-        centipede.push({ x: c.width / 2 + (i - n / 2) * 18, y: 30 });
-    }
-}
-
-function startGame() {
-    gameState = "playing";
-    score = 0;
-    lives = 3;
-    wave = 1;
-    bullets.length = 0;
-    initMushrooms();
-    initCentipede();
-    player.x = c.width / 2;
-    player.y = c.height - 60;
-}
-
-function resetGame() {
-    gameState = "title";
-    score = 0;
-    lives = 3;
-    wave = 1;
-}
-
-function fire() {
-    if (gameState !== "playing") return;
-    bullets.push({ x: player.x, y: player.y - 10 });
-    playSound(800, 0.1);
-}
-
-function update() {
-    if (gameState !== "playing") return;
-
-    // Player movement
-    var moveSpeed = 6;
-    if (keys["ArrowLeft"] || touchDir === -1) {
-        player.x = Math.max(player.width / 2, player.x - moveSpeed);
-    }
-    if (keys["ArrowRight"] || touchDir === 1) {
-        player.x = Math.min(c.width - player.width / 2, player.x + moveSpeed);
-    }
-
-    // Auto-fire on space
-    if (keys[" "]) {
-        fire();
-    }
-
-    // Update bullets
-    for (var i = bullets.length - 1; i >= 0; i--) {
-        bullets[i].y -= 8;
-        if (bullets[i].y < -10) {
-            bullets.splice(i, 1);
-        }
-    }
-
-    // Move centipede
-    var moveDown = false;
-    for (var j = 0; j < centipede.length; j++) {
-        var s = centipede[j];
-        s.x += 1.2;
-        if (s.x > c.width - 10 || s.x < 10) {
-            moveDown = true;
-        }
-    }
-
-    if (moveDown) {
-        for (var k = 0; k < centipede.length; k++) {
-            var seg = centipede[k];
-            seg.x = Math.max(10, Math.min(c.width - 10, seg.x));
-            seg.y += 8;
-        }
-    }
-
-    // Bullet vs centipede collision
-    for (var bi = bullets.length - 1; bi >= 0; bi--) {
-        var b = bullets[bi];
-        var hit = false;
-
-        for (var ci = centipede.length - 1; ci >= 0; ci--) {
-            var cs = centipede[ci];
-            if (Math.hypot(b.x - cs.x, b.y - cs.y) < 12) {
-                bullets.splice(bi, 1);
-                centipede.splice(ci, 1);
-                score += 10;
-                playSound(200, 0.15);
-                hit = true;
-                break;
-            }
+        if (gameState === "title") {
+            startGame();
+            return;
         }
 
-        if (hit) continue;
-
-        // Bullet vs mushroom collision
-        for (var mi = mushrooms.length - 1; mi >= 0; mi--) {
-            var m = mushrooms[mi];
-            if (Math.hypot(b.x - m.x, b.y - m.y) < 14) {
-                bullets.splice(bi, 1);
-                mushrooms.splice(mi, 1);
-                score += 5;
-                playSound(400, 0.1);
-                break;
-            }
+        if (gameState === "gameover") {
+            resetGame();
+            return;
         }
-    }
 
-    // Player vs centipede collision
-    for (var pi = 0; pi < centipede.length; pi++) {
-        var ps = centipede[pi];
-        if (Math.hypot(player.x - ps.x, player.y - ps.y) < 18) {
-            lives--;
-            playSound(100, 0.3, "sawtooth");
-
-            if (lives <= 0) {
-                gameState = "gameover";
-                playSound(80, 0.5, "sawtooth");
-            } else {
-                player.x = c.width / 2;
-            }
-        }
-    }
-
-    // Wave clear
-    if (centipede.length === 0 && mushrooms.length < 5) {
-        wave++;
-        initCentipede();
-        playSound(600, 0.2);
-    }
-}
-
-function draw() {
-    // Clear with dark background
-    ctx.fillStyle = "#051a0a";
-    ctx.fillRect(0, 0, c.width, c.height);
-
-    if (gameState === "title") {
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 36px monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("CENTIPEDE", c.width / 2, c.height / 3);
-
-        ctx.font = "18px monospace";
-        ctx.fillStyle = "#0f0";
-        ctx.fillText("Tap or Click to Start", c.width / 2, c.height / 2);
-
-        ctx.font = "14px monospace";
-        ctx.fillStyle = "#888";
-        ctx.fillText("Arrow Keys to Move | Space/Center to Shoot", c.width / 2, c.height / 2 + 40);
-        ctx.textAlign = "left";
-        return;
-    }
-
-    // Draw mushrooms
-    for (var i = 0; i < mushrooms.length; i++) {
-        var m = mushrooms[i];
-        var hpRatio = m.hp / m.maxHp;
-
-        ctx.fillStyle = "#f5deb3";
-        ctx.fillRect(m.x - 4, m.y + 2, 8, 10);
-
-        var r = Math.floor(58 * hpRatio);
-        var g = Math.floor(160 * hpRatio + 50 * (1 - hpRatio));
-        var b = Math.floor(48 * hpRatio + 50 * (1 - hpRatio));
-        ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
-
-        ctx.beginPath();
-        ctx.arc(m.x, m.y - 2, 10, Math.PI, 0);
-        ctx.fill();
-
-        ctx.fillStyle = "rgba(255,255,255,0.7)";
-        ctx.beginPath();
-        ctx.arc(m.x - 4, m.y - 5, 2, 0, Math.PI * 2);
-        ctx.arc(m.x + 4, m.y - 5, 2, 0, Math.PI * 2);
-        ctx.arc(m.x, m.y - 7, 2, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // Draw centipede
-    for (var i = 0; i < centipede.length; i++) {
-        var s = centipede[i];
-
-        if (i === 0) {
-            // Head
-            ctx.fillStyle = "#ff3020";
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Eyes
-            ctx.fillStyle = "#fff";
-            ctx.beginPath();
-            ctx.arc(s.x - 3, s.y - 2, 2.5, 0, Math.PI * 2);
-            ctx.arc(s.x + 3, s.y - 2, 2.5, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Antennae
-            ctx.strokeStyle = "#ff3020";
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(s.x - 4, s.y - 6);
-            ctx.lineTo(s.x - 7, s.y - 10);
-            ctx.moveTo(s.x + 4, s.y - 6);
-            ctx.lineTo(s.x + 7, s.y - 10);
-            ctx.stroke();
+        var touch = e.touches[0];
+        if (touch.clientX < c.width / 3) {
+            touchDir = -1;
+        } else if (touch.clientX > c.width * 2 / 3) {
+            touchDir = 1;
         } else {
-            // Body segments
-            var color = i % 2 === 0 ? "#e84030" : "#c83020";
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
-            ctx.fill();
+            fire();
+        }
+    });
 
-            // Eye on each segment
-            ctx.fillStyle = "rgba(0,0,0,0.3)";
-            ctx.beginPath();
-            ctx.arc(s.x - 2, s.y - 1, 2.5, 0, Math.PI * 2);
-            ctx.fill();
+    c.addEventListener("touchend", function(e) {
+        e.preventDefault();
+        touchDir = 0;
+    });
+
+    // Mouse controls
+    window.addEventListener("mousedown", function(e) {
+        initAudio();
+
+        if (gameState === "title") {
+            startGame();
+            return;
+        }
+
+        if (gameState === "gameover") {
+            resetGame();
+            return;
+        }
+
+        if (e.clientX < c.width / 3) {
+            touchDir = -1;
+        } else if (e.clientX > c.width * 2 / 3) {
+            touchDir = 1;
+        } else {
+            fire();
+        }
+    });
+
+    window.addEventListener("mouseup", function() {
+        touchDir = 0;
+    });
+
+    // Initialize
+    function resize() {
+        c.width = window.innerWidth;
+        c.height = window.innerHeight;
+    }
+
+    function initMushrooms() {
+        mushrooms.length = 0;
+        var rows = Math.floor(c.height / 35);
+        for (var r = 0; r < Math.min(rows, 8); r++) {
+            for (var col = 0; col < c.width / 35; col++) {
+                if (Math.random() > 0.2) {
+                    mushrooms.push({ x: col * 35 + 17, y: r * 35 + 40, hp: 4, maxHp: 4 });
+                }
+            }
         }
     }
 
-    // Draw bullets
-    for (var i = 0; i < bullets.length; i++) {
-        var b = bullets[i];
-        var gradient = ctx.createLinearGradient(b.x, b.y, b.x, b.y + 8);
-        gradient.addColorStop(0, "#ffff00");
-        gradient.addColorStop(1, "rgba(255,255,0,0)");
-        ctx.fillStyle = gradient;
-        ctx.fillRect(b.x - 2, b.y, 4, 8);
-
-        ctx.fillStyle = "#fff";
-        ctx.beginPath();
-        ctx.arc(b.x, b.y - 2, 3, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // Draw player
-    if (gameState === "playing") {
-        ctx.fillStyle = "#0f0";
-        ctx.fillRect(player.x - 12, player.y - 6, 24, 12);
-
-        ctx.fillStyle = "#0a0";
-        ctx.fillRect(player.x - 4, player.y - 12, 8, 6);
-
-        ctx.fillStyle = "#050";
-        for (var i = -1; i <= 1; i++) {
-            ctx.fillRect(player.x + i * 8 - 2, player.y + 6, 4, 3);
+    function initCentipede() {
+        centipede.length = 0;
+        var n = Math.min(12 + wave * 3, 25);
+        for (var i = 0; i < n; i++) {
+            centipede.push({ x: c.width / 2 + (i - n / 2) * 18, y: 30 });
         }
     }
 
-    // Draw UI
-    ctx.fillStyle = "#fff";
-    ctx.font = "14px monospace";
-    ctx.fillText("Score: " + score, 10, 25);
-    ctx.fillText("Lives: " + lives, 10, 45);
-    ctx.fillText("Wave: " + wave, 10, 65);
+    function startGame() {
+        gameState = "playing";
+        score = 0;
+        lives = 3;
+        wave = 1;
+        bullets.length = 0;
+        initMushrooms();
+        initCentipede();
+        player.x = c.width / 2;
+        player.y = c.height - 60;
+    }
 
-    // Game over screen
-    if (gameState === "gameover") {
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
+    function resetGame() {
+        gameState = "title";
+        score = 0;
+        lives = 3;
+        wave = 1;
+    }
+
+    function fire() {
+        if (gameState !== "playing") return;
+        bullets.push({ x: player.x, y: player.y - 10 });
+        playSound(800, 0.1);
+    }
+
+    function update() {
+        if (gameState !== "playing") return;
+
+        // Player movement
+        var moveSpeed = 6;
+        if (keys["ArrowLeft"] || touchDir === -1) {
+            player.x = Math.max(player.width / 2, player.x - moveSpeed);
+        }
+        if (keys["ArrowRight"] || touchDir === 1) {
+            player.x = Math.min(c.width - player.width / 2, player.x + moveSpeed);
+        }
+
+        // Auto-fire on space
+        if (keys[" "]) {
+            fire();
+        }
+
+        // Update bullets
+        for (var i = bullets.length - 1; i >= 0; i--) {
+            bullets[i].y -= 8;
+            if (bullets[i].y < -10) {
+                bullets.splice(i, 1);
+            }
+        }
+
+        // Move centipede
+        var moveDown = false;
+        for (var j = 0; j < centipede.length; j++) {
+            var s = centipede[j];
+            s.x += 1.2;
+            if (s.x > c.width - 10 || s.x < 10) {
+                moveDown = true;
+            }
+        }
+
+        if (moveDown) {
+            for (var k = 0; k < centipede.length; k++) {
+                var seg = centipede[k];
+                seg.x = Math.max(10, Math.min(c.width - 10, seg.x));
+                seg.y += 8;
+            }
+        }
+
+        // Bullet vs centipede collision
+        for (var bi = bullets.length - 1; bi >= 0; bi--) {
+            var b = bullets[bi];
+            var hit = false;
+
+            for (var ci = centipede.length - 1; ci >= 0; ci--) {
+                var cs = centipede[ci];
+                if (Math.hypot(b.x - cs.x, b.y - cs.y) < 12) {
+                    bullets.splice(bi, 1);
+                    centipede.splice(ci, 1);
+                    score += 10;
+                    playSound(200, 0.15);
+                    hit = true;
+                    break;
+                }
+            }
+
+            if (hit) continue;
+
+            // Bullet vs mushroom collision
+            for (var mi = mushrooms.length - 1; mi >= 0; mi--) {
+                var m = mushrooms[mi];
+                if (Math.hypot(b.x - m.x, b.y - m.y) < 14) {
+                    bullets.splice(bi, 1);
+                    mushrooms.splice(mi, 1);
+                    score += 5;
+                    playSound(400, 0.1);
+                    break;
+                }
+            }
+        }
+
+        // Player vs centipede collision
+        for (var pi = 0; pi < centipede.length; pi++) {
+            var ps = centipede[pi];
+            if (Math.hypot(player.x - ps.x, player.y - ps.y) < 18) {
+                lives--;
+                playSound(100, 0.3, "sawtooth");
+
+                if (lives <= 0) {
+                    gameState = "gameover";
+                    playSound(80, 0.5, "sawtooth");
+                } else {
+                    player.x = c.width / 2;
+                }
+            }
+        }
+
+        // Wave clear
+        if (centipede.length === 0 && mushrooms.length < 5) {
+            wave++;
+            initCentipede();
+            playSound(600, 0.2);
+        }
+    }
+
+    function draw() {
+        // Clear with dark background
+        ctx.fillStyle = "#051a0a";
         ctx.fillRect(0, 0, c.width, c.height);
 
-        ctx.fillStyle = "#f00";
-        ctx.font = "bold 48px monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("GAME OVER", c.width / 2, c.height / 2 - 40);
+        if (gameState === "title") {
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 36px monospace";
+            ctx.textAlign = "center";
+            ctx.fillText("CENTIPEDE", c.width / 2, c.height / 3);
 
+            ctx.font = "18px monospace";
+            ctx.fillStyle = "#0f0";
+            ctx.fillText("Tap or Click to Start", c.width / 2, c.height / 2);
+
+            ctx.font = "14px monospace";
+            ctx.fillStyle = "#888";
+            ctx.fillText("Arrow Keys to Move | Space/Center to Shoot", c.width / 2, c.height / 2 + 40);
+            ctx.textAlign = "left";
+            return;
+        }
+
+        // Draw mushrooms
+        for (var i = 0; i < mushrooms.length; i++) {
+            var m = mushrooms[i];
+            var hpRatio = m.hp / m.maxHp;
+
+            ctx.fillStyle = "#f5deb3";
+            ctx.fillRect(m.x - 4, m.y + 2, 8, 10);
+
+            var r = Math.floor(58 * hpRatio);
+            var g = Math.floor(160 * hpRatio + 50 * (1 - hpRatio));
+            var b = Math.floor(48 * hpRatio + 50 * (1 - hpRatio));
+            ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+
+            ctx.beginPath();
+            ctx.arc(m.x, m.y - 2, 10, Math.PI, 0);
+            ctx.fill();
+
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            ctx.beginPath();
+            ctx.arc(m.x - 4, m.y - 5, 2, 0, Math.PI * 2);
+            ctx.arc(m.x + 4, m.y - 5, 2, 0, Math.PI * 2);
+            ctx.arc(m.x, m.y - 7, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Draw centipede
+        for (var i = 0; i < centipede.length; i++) {
+            var s = centipede[i];
+
+            if (i === 0) {
+                ctx.fillStyle = "#ff3020";
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "#fff";
+                ctx.beginPath();
+                ctx.arc(s.x - 3, s.y - 2, 2.5, 0, Math.PI * 2);
+                ctx.arc(s.x + 3, s.y - 2, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = "#ff3020";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(s.x - 4, s.y - 6);
+                ctx.lineTo(s.x - 7, s.y - 10);
+                ctx.moveTo(s.x + 4, s.y - 6);
+                ctx.lineTo(s.x + 7, s.y - 10);
+                ctx.stroke();
+            } else {
+                var color = i % 2 === 0 ? "#e84030" : "#c83020";
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "rgba(0,0,0,0.3)";
+                ctx.beginPath();
+                ctx.arc(s.x - 2, s.y - 1, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Draw bullets
+        for (var i = 0; i < bullets.length; i++) {
+            var b = bullets[i];
+            var gradient = ctx.createLinearGradient(b.x, b.y, b.x, b.y + 8);
+            gradient.addColorStop(0, "#ffff00");
+            gradient.addColorStop(1, "rgba(255,255,0,0)");
+            ctx.fillStyle = gradient;
+            ctx.fillRect(b.x - 2, b.y, 4, 8);
+
+            ctx.fillStyle = "#fff";
+            ctx.beginPath();
+            ctx.arc(b.x, b.y - 2, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Draw player
+        if (gameState === "playing") {
+            ctx.fillStyle = "#0f0";
+            ctx.fillRect(player.x - 12, player.y - 6, 24, 12);
+
+            ctx.fillStyle = "#0a0";
+            ctx.fillRect(player.x - 4, player.y - 12, 8, 6);
+
+            ctx.fillStyle = "#050";
+            for (var i = -1; i <= 1; i++) {
+                ctx.fillRect(player.x + i * 8 - 2, player.y + 6, 4, 3);
+            }
+        }
+
+        // Draw UI
         ctx.fillStyle = "#fff";
-        ctx.font = "24px monospace";
-        ctx.fillText("Score: " + score, c.width / 2, c.height / 2 + 10);
+        ctx.font = "14px monospace";
+        ctx.fillText("Score: " + score, 10, 25);
+        ctx.fillText("Lives: " + lives, 10, 45);
+        ctx.fillText("Wave: " + wave, 10, 65);
 
-        ctx.fillStyle = "#8f8";
-        ctx.font = "16px monospace";
-        ctx.fillText("Tap to Restart", c.width / 2, c.height / 2 + 50);
-        ctx.textAlign = "left";
+        // Game over screen
+        if (gameState === "gameover") {
+            ctx.fillStyle = "rgba(0,0,0,0.7)";
+            ctx.fillRect(0, 0, c.width, c.height);
+
+            ctx.fillStyle = "#f00";
+            ctx.font = "bold 48px monospace";
+            ctx.textAlign = "center";
+            ctx.fillText("GAME OVER", c.width / 2, c.height / 2 - 40);
+
+            ctx.fillStyle = "#fff";
+            ctx.font = "24px monospace";
+            ctx.fillText("Score: " + score, c.width / 2, c.height / 2 + 10);
+
+            ctx.fillStyle = "#8f8";
+            ctx.font = "16px monospace";
+            ctx.fillText("Tap to Restart", c.width / 2, c.height / 2 + 50);
+            ctx.textAlign = "left";
+        }
     }
-}
 
-function loop() {
-    update();
-    draw();
-    requestAnimationFrame(loop);
-}
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
 
-// Start game loop
-resize();
-loop();
+    // Start game loop
+    resize();
+    loop();
+
+})();
 </script>
 </body>
 </html>
