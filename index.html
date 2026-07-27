@@ -43,18 +43,31 @@ function createCentipede() {
 }
 
 const keys = {};
-document.addEventListener('keydown', (e) => { keys[e.key] = true; });
-document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+document.addEventListener('keydown', (e) => { 
+    if (['ArrowLeft','ArrowRight',' '].includes(e.key)) {
+        keys[e.key] = true; 
+    }
+});
+document.addEventListener('keyup', (e) => { 
+    if (['ArrowLeft','ArrowRight',' '].includes(e.key)) {
+        keys[e.key] = false; 
+    }
+});
 
 canvas.addEventListener('click', () => {
     if (gameState === 'title') {
         startGame();
     } else if (gameState === 'playing') {
-        bullets.push({ x: player.x, y: player.y });
+        fire();
     } else if (gameState === 'gameover') {
         startGame();
     }
 });
+
+function fire() {
+    if (gameState !== 'playing') return;
+    bullets.push({ x: player.x, y: player.y });
+}
 
 function startGame() {
     gameState = 'playing';
@@ -67,14 +80,20 @@ function startGame() {
 function update() {
     if (gameState !== 'playing') return;
 
-    if (keys['ArrowLeft'] && player.x > 0) player.x -= 5;
-    if (keys['ArrowRight'] && player.x < canvas.width - player.width) player.x += 5;
+    // Player movement - check both string keys and boolean values
+    if (keys['ArrowLeft'] || keys.ArrowLeft) player.x = Math.max(0, player.x - 5);
+    if (keys['ArrowRight'] || keys.ArrowRight) player.x = Math.min(canvas.width - player.width, player.x + 5);
 
+    // Auto-fire on space
+    if (keys[' '] || keys.Space) fire();
+
+    // Update bullets
     for (let i = bullets.length - 1; i >= 0; i--) {
         bullets[i].y -= 8;
         if (bullets[i].y < 0) bullets.splice(i, 1);
     }
 
+    // Move centipede
     let moveDown = false;
     for (let i = 0; i < centipede.length; i++) {
         centipede[i].x += 2;
@@ -89,26 +108,47 @@ function update() {
         }
     }
 
+    // Bullet vs centipede collision
     for (let i = bullets.length - 1; i >= 0; i--) {
         for (let j = centipede.length - 1; j >= 0; j--) {
             const dist = Math.hypot(bullets[i].x - centipede[j].x, bullets[i].y - centipede[j].y);
-            if (dist < 20) { bullets.splice(i, 1); centipede.splice(j, 1); score += 10; break; }
+            if (dist < 20) { 
+                bullets.splice(i, 1); 
+                centipede.splice(j, 1); 
+                score += 10;
+                break; 
+            }
         }
     }
 
+    // Bullet vs mushroom collision
     for (let i = bullets.length - 1; i >= 0; i--) {
         for (let j = mushrooms.length - 1; j >= 0; j--) {
             const dist = Math.hypot(bullets[i].x - mushrooms[j].x, bullets[i].y - mushrooms[j].y);
-            if (dist < 20) { bullets.splice(i, 1); mushrooms[j].hp--; if (mushrooms[j].hp <= 0) mushrooms.splice(j, 1); break; }
+            if (dist < 20) { 
+                bullets.splice(i, 1); 
+                mushrooms[j].hp--; 
+                if (mushrooms[j].hp <= 0) mushrooms.splice(j, 1);
+                break; 
+            }
         }
     }
 
+    // Player vs centipede collision
     for (let i = 0; i < centipede.length; i++) {
         const dist = Math.hypot(player.x - centipede[i].x, player.y - centipede[i].y);
-        if (dist < 25) { lives--; if (lives <= 0) gameState = 'gameover'; else player.x = 400; }
+        if (dist < 25) { 
+            lives--; 
+            if (lives <= 0) gameState = 'gameover';
+            else player.x = 400; 
+        }
     }
 
-    if (centipede.length === 0) { createCentipede(); score += 100; }
+    // Wave clear
+    if (centipede.length === 0) { 
+        createCentipede(); 
+        score += 100;
+    }
 }
 
 function draw() {
@@ -124,24 +164,40 @@ function draw() {
         return;
     }
 
+    // Draw mushrooms
     ctx.fillStyle = '#8b4513';
-    for (let m of mushrooms) { ctx.beginPath(); ctx.arc(m.x, m.y, 15, 0, Math.PI * 2); ctx.fill(); }
+    for (let m of mushrooms) { 
+        ctx.beginPath(); 
+        ctx.arc(m.x, m.y, 15, 0, Math.PI * 2); 
+        ctx.fill(); 
+    }
 
+    // Draw centipede
     ctx.fillStyle = '#ff0000';
-    for (let i = 0; i < centipede.length; i++) { ctx.beginPath(); ctx.arc(centipede[i].x, centipede[i].y, 12, 0, Math.PI * 2); ctx.fill(); }
+    for (let i = 0; i < centipede.length; i++) { 
+        ctx.beginPath(); 
+        ctx.arc(centipede[i].x, centipede[i].y, 12, 0, Math.PI * 2); 
+        ctx.fill(); 
+    }
 
+    // Draw bullets
     ctx.fillStyle = '#ffff00';
-    for (let b of bullets) { ctx.fillRect(b.x - 2, b.y, 4, 10); }
+    for (let b of bullets) { 
+        ctx.fillRect(b.x - 2, b.y, 4, 10); 
+    }
 
+    // Draw player
     ctx.fillStyle = '#00ff00';
     ctx.fillRect(player.x - player.width / 2, player.y - player.height / 2, player.width, player.height);
 
+    // Draw UI
     ctx.fillStyle = '#fff';
     ctx.font = '20px Arial';
     ctx.textAlign = 'left';
     ctx.fillText('Score: ' + score, 10, 30);
     ctx.fillText('Lives: ' + lives, 10, 60);
 
+    // Game over
     if (gameState === 'gameover') {
         ctx.fillStyle = '#ff0000';
         ctx.font = '48px Arial';
@@ -150,7 +206,12 @@ function draw() {
     }
 }
 
-function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+// Game loop - this was missing!
+function gameLoop() { 
+    update(); 
+    draw(); 
+    requestAnimationFrame(gameLoop); 
+}
 gameLoop();
 </script>
 </body>
