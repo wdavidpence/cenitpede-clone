@@ -452,21 +452,15 @@ function update() {
         }
         
         // Bullet vs Spider
-        if (spider) {
-            var spiderHit = false;
-            for (var i2 = 0; i2 < splitCentipedes.length + 1; i2++) {
-                if (circleCollision(b.x, b.y, b.size, spider.x, spider.y, spider.size)) {
-                    bullets.splice(i, 1);
-                    score += 100;
-                    
-                    spawnParticles(spider.x, spider.y, '#8B4513', 20);
-                    splatSound();
-                    
-                    spider = null;
-                    spiderTimer = 400 + Math.random() * 300;
-                    break;
-                }
-            }
+        if (spider && circleCollision(b.x, b.y, b.size, spider.x, spider.y, spider.size)) {
+            bullets.splice(i, 1);
+            score += 100;
+
+            spawnParticles(spider.x, spider.y, '#8B4513', 20);
+            splatSound();
+
+            spider = null;
+            spiderTimer = 400 + Math.random() * 300;
         }
         
         // Bullet vs Fleas
