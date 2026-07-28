@@ -228,10 +228,8 @@ function updateCentipedes() {
             else if (mushroomAt(nextCol, head.row)) { blocked = true; }
 
             if (blocked) {
-                // Drop ALL segments one row, reverse direction
-                for (var s = 0; s < c.segments.length; s++) {
-                    c.segments[s].row += 1;
-                }
+                // Drop HEAD one row, reverse direction. Body follows naturally via snake chain.
+                head.row += 1;
                 c.direction *= -1;
             } else {
                 // Move head forward
