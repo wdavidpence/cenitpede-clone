@@ -23,9 +23,9 @@ canvas { display: block; width: 100vw; height: 100vh; }
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-// --- Grid-based layout (original Centipede: 30x30 grid) ---
-var GRID_COLS = 30;
-var GRID_ROWS = 28;   // playable rows (row 0 = HUD, row 29+ = player area)
+// --- Grid-based layout (original Centipede: 30x30 grid, doubled for more rows) ---
+var GRID_COLS = 60;
+var GRID_ROWS = 56;   // doubled rows for more bouncing room
 var cellW, cellH;
 
 // --- Canvas sizing for iPhone portrait ---
@@ -200,8 +200,9 @@ function splitCentipede(centi, segIndex) {
 }
 
 // Grid-based boustrophedon movement.
-// Each segment moves independently: head advances horizontally, drops on block.
-// Body segments follow the predecessor's previous position (snake chain).
+// Head determines direction. When head hits obstacle, it drops and reverses.
+// Body segments independently drop when they hit mushrooms on their row (no direction change).
+// This creates the twisting/serpentine descent through the mushroom field.
 function updateCentipedes() {
     var scrolledOff = false;
 
@@ -218,41 +219,27 @@ function updateCentipedes() {
             var c = centipedes[ci];
             if (!c.segments || !c.segments.length) { centipedes.splice(ci, 1); continue; }
 
-            // --- Move head ---
-            var head = c.segments[0];
-            var nextCol = head.col + c.direction;
+            // --- Move each segment independently ---
+            for (var i = 0; i < c.segments.length; i++) {
+                var seg = c.segments[i];
+                var nextCol = seg.col + c.direction;
 
-            // Check wall or mushroom at (nextCol, head.row)
-            var blocked = false;
-            if (nextCol < 0 || nextCol >= GRID_COLS) { blocked = true; }
-            else if (mushroomAt(nextCol, head.row)) { blocked = true; }
+                // Check wall or mushroom at (nextCol, seg.row)
+                var blocked = false;
+                if (nextCol < 0 || nextCol >= GRID_COLS) { blocked = true; }
+                else if (mushroomAt(nextCol, seg.row)) { blocked = true; }
 
-            if (blocked) {
-                // Drop HEAD one row, reverse direction. Body follows naturally via snake chain.
-                head.row += 1;
-                c.direction *= -1;
-            } else {
-                // Move head forward
-                head.col = nextCol;
+                if (blocked) {
+                    // Drop this segment one row
+                    seg.row += 1;
 
-                // Body segments follow: each moves toward predecessor's position
-                for (var i = 1; i < c.segments.length; i++) {
-                    var prev = c.segments[i - 1];
-                    var curr = c.segments[i];
-
-                    // If predecessor is on same row, move horizontally toward it
-                    if (prev.row === curr.row) {
-                        var dc = prev.col - curr.col;
-                        if (Math.abs(dc) > 0) {
-                            curr.col += Math.sign(dc);
-                        }
-                    } else if (prev.row < curr.row) {
-                        // Predecessor is above: move up one row, then toward its col
-                        curr.row -= 1;
-                    } else if (prev.row > curr.row) {
-                        // Predecessor is below: move down one row
-                        curr.row += 1;
+                    // Only the HEAD reverses direction for the whole centipede
+                    if (i === 0) {
+                        c.direction *= -1;
                     }
+                } else {
+                    // Move this segment forward
+                    seg.col = nextCol;
                 }
             }
 
@@ -275,7 +262,7 @@ function updateCentipedes() {
             }
 
             // --- off bottom? remove and flag it ---
-            if (head.row >= GRID_ROWS) {
+            if (c.segments[0].row >= GRID_ROWS) {
                 scrolledOff = true;
                 centipedes.splice(ci, 1);
             }
