@@ -121,11 +121,11 @@ function removeMushroom(col, row) {
 
 function createMushrooms() {
     mushrooms.length = 0;
-    // Fill rows 1..GRID_ROWS-3 with ~20% density (original Centipede style)
-    // Low enough that centipedes traverse most of each row before dropping
+    // Fill rows 1..GRID_ROWS-3 with ~50% density for authentic serpentine weaving
+    // Centipede hits mushrooms frequently, drops rows, and reverses — creating the twisty descent
     for (var r = 1; r < GRID_ROWS - 3; r++) {
         for (var c = 0; c < GRID_COLS; c++) {
-            if (Math.random() > 0.8) {
+            if (Math.random() > 0.5) {
                 mushrooms.push({ col: c, row: r, hp: 4 });
             }
         }
@@ -201,9 +201,10 @@ function splitCentipede(centi, segIndex) {
 }
 
 // Grid-based boustrophedon movement with trail-following.
-// Head determines direction and drops on obstacles.
-// Body segments follow the predecessor's previous position (snake chain) — no independent drops.
-// This creates natural serpentine curves as segments trace different paths at a delay.
+// Head: moves horizontally, drops 1 row + reverses on wall/mushroom contact.
+// Body segments: follow predecessor's previous position (snake chain) — no independent drops.
+// When the head drops a row, that drop propagates down the chain with delay, creating serpentine curves.
+// This is the authentic Centipede movement pattern.
 function updateCentipedes() {
     var scrolledOff = false;
 
@@ -249,7 +250,7 @@ function updateCentipedes() {
                 var seg = c.segments[i];
                 var prevPos = prevPositions[i - 1];
 
-                // Move into predecessor's previous position — no independent drops
+                // Move into predecessor's previous position — no independent mushroom checks
                 seg.col = prevPos.col;
                 seg.row = prevPos.row;
             }
