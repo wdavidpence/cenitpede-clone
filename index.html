@@ -172,6 +172,7 @@ function splitCentipede(centi, segIndex) {
 // Boustrophedon movement: horizontal across row, drop on wall/mushroom contact.
 function updateCentipedes() {
     var DROP = 20;
+    var scrolledOff = false;
 
     for (var ci = centipedes.length - 1; ci >= 0; ci--) {
         var c = centipedes[ci];
@@ -226,8 +227,9 @@ function updateCentipedes() {
             }
         }
 
-        // --- off bottom? remove and schedule replacement ---
+        // --- off bottom? remove and flag it ---
         if (head.y > canvas.height + 30) {
+            scrolledOff = true;
             centipedes.splice(ci, 1);
         }
     }
@@ -241,24 +243,19 @@ function updateCentipedes() {
         }
     }
 
-    // --- all gone? either wave complete or waiting for respawn ---
+    // --- all gone? wave complete or waiting for respawn ---
     if (centipedes.length === 0 && !newCentipedePending) {
-        // Check: did they all get shot or scroll off bottom?
-        // If we just cleared a wave by shooting, advance.
-        // If they scrolled off bottom, start the 10s timer.
-        // We distinguish by checking if newCentipedePending was set during the loop above.
-        // Since it wasn't, this means they were all destroyed by shooting -> next wave.
-        wave++;
-        waveSound();
-        createMushrooms();
-        createCentipede();
-    }
-
-    // If all centipedes scrolled off bottom (none left, timer not pending yet), start it
-    if (centipedes.length === 0 && !newCentipedePending) {
-        // This can only happen if they all left in the same frame.
-        newCentipedePending = true;
-        newCentipedeTimer = 600; // ~10 seconds at 60fps
+        if (!scrolledOff) {
+            // All destroyed by shooting -> next wave
+            wave++;
+            waveSound();
+            createMushrooms();
+            createCentipede();
+        } else {
+            // At least one scrolled off bottom -> 10s respawn
+            newCentipedePending = true;
+            newCentipedeTimer = 600; // ~10 seconds at 60fps
+        }
     }
 }
 
