@@ -199,10 +199,10 @@ function splitCentipede(centi, segIndex) {
     }
 }
 
-// Grid-based boustrophedon movement.
-// Head determines direction. When head hits obstacle, it drops and reverses.
-// Body segments independently drop when they hit mushrooms on their row (no direction change).
-// This creates the twisting/serpentine descent through the mushroom field.
+// Grid-based boustrophedon movement with trail-following.
+// Head determines direction and drops on obstacles.
+// Body segments follow the predecessor's previous position (snake chain).
+// This creates natural serpentine curves as segments trace different paths.
 function updateCentipedes() {
     var scrolledOff = false;
 
@@ -219,27 +219,43 @@ function updateCentipedes() {
             var c = centipedes[ci];
             if (!c.segments || !c.segments.length) { centipedes.splice(ci, 1); continue; }
 
-            // --- Move each segment independently ---
+            // --- Record current positions before moving ---
+            var prevPositions = [];
             for (var i = 0; i < c.segments.length; i++) {
+                prevPositions.push({ col: c.segments[i].col, row: c.segments[i].row });
+            }
+
+            // --- Move head with obstacle checking ---
+            var head = c.segments[0];
+            var nextCol = head.col + c.direction;
+
+            // Check wall or mushroom at (nextCol, head.row)
+            var blocked = false;
+            if (nextCol < 0 || nextCol >= GRID_COLS) { blocked = true; }
+            else if (mushroomAt(nextCol, head.row)) { blocked = true; }
+
+            if (blocked) {
+                // Drop HEAD one row, reverse direction for the whole centipede
+                head.row += 1;
+                c.direction *= -1;
+            } else {
+                // Move head forward
+                head.col = nextCol;
+            }
+
+            // --- Body segments follow predecessor's previous position (snake chain) ---
+            for (var i = 1; i < c.segments.length; i++) {
                 var seg = c.segments[i];
-                var nextCol = seg.col + c.direction;
+                var prevPos = prevPositions[i - 1];
 
-                // Check wall or mushroom at (nextCol, seg.row)
-                var blocked = false;
-                if (nextCol < 0 || nextCol >= GRID_COLS) { blocked = true; }
-                else if (mushroomAt(nextCol, seg.row)) { blocked = true; }
+                // Move into predecessor's previous position
+                seg.col = prevPos.col;
+                seg.row = prevPos.row;
 
-                if (blocked) {
-                    // Drop this segment one row
+                // If this segment would be blocked by a mushroom at its new position,
+                // it drops one row instead (creating the twisting effect)
+                if (mushroomAt(seg.col, seg.row)) {
                     seg.row += 1;
-
-                    // Only the HEAD reverses direction for the whole centipede
-                    if (i === 0) {
-                        c.direction *= -1;
-                    }
-                } else {
-                    // Move this segment forward
-                    seg.col = nextCol;
                 }
             }
 
