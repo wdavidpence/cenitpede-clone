@@ -116,196 +116,123 @@ function mushroomColor(hp) {
 }
 
 // --- Centipedes (array of independent centipede objects) ---
-// Each centipede: { segments: [{x, y, size}], direction: 1|-1, speed: N }
+// Each: { segments: [{x, y, size}], direction: 1|-1, speed: N }
 var centipedes = [];
-var newCentipedeTimer = 0; // countdown to spawn replacement (10s = 600 frames)
+var newCentipedeTimer = 0;   // frames until replacement spawns (600 = ~10s)
 var newCentipedePending = false;
 
 function createCentipede() {
-    var segments = 12 + wave * 2; // more each wave
-    var segSize = Math.max(10, 16 - wave); // smaller each wave
-    var segSpacing = segSize * 2.5;
-    var startY = 40; // top of play area
-    var startX = segSize + 10; // start near left edge
+    var numSegs = 12 + wave * 2;
+    var segSize = Math.max(10, 16 - wave);
+    var spacing = segSize * 2.5;
+    var startY = 40;
+    var startX = segSize + 10;
 
     var segs = [];
-    for (var i = 0; i < segments; i++) {
-        segs.push({
-            x: startX + i * segSpacing,
-            y: startY,
-            size: segSize
-        });
+    for (var i = 0; i < numSegs; i++) {
+        segs.push({ x: startX + i * spacing, y: startY, size: segSize });
     }
 
     centipedes.push({
         segments: segs,
-        direction: 1, // 1 = right, -1 = left
+        direction: 1,   // right first
         speed: Math.max(1.5, 3 - wave * 0.2)
     });
 }
 
-// Split a centipede at segment index `idx`.
-// Front part (0..idx-1) keeps current direction.
-// Rear part (idx+1..end) reverses direction.
-// Segment at idx is destroyed (turns to mushroom).
+// Hit body segment at segIndex -> split into two centipedes.
+// Front (0..idx-1) keeps direction; rear (idx+1..) reverses + drops one row.
 function splitCentipede(centi, segIndex) {
     var seg = centi.segments[segIndex];
 
-    // Drop mushroom where segment was hit
-    mushrooms.push({
-        x: seg.x, y: seg.y, hp: 4, radius: seg.size
-    });
+    // Hit segment becomes mushroom
+    mushrooms.push({ x: seg.x, y: seg.y, hp: 4, radius: seg.size });
 
     var frontSegs = centi.segments.slice(0, segIndex);
-    var rearSegs = centi.segments.slice(segIndex + 1);
+    var rearSegs  = centi.segments.slice(segIndex + 1);
 
-    // Remove the original centipede
-    var cIdx = -1;
-    for (var i = 0; i < centipedes.length; i++) {
-        if (centipedes[i] === centi) { cIdx = i; break; }
-    }
+    // Remove original
+    var cIdx = centipedes.indexOf(centi);
     if (cIdx >= 0) centipedes.splice(cIdx, 1);
 
-    // Front half continues in same direction
+    // Front half: same direction
     if (frontSegs.length > 0) {
-        centipedes.push({
-            segments: frontSegs,
-            direction: centi.direction,
-            speed: centi.speed
-        });
+        centipedes.push({ segments: frontSegs, direction: centi.direction, speed: centi.speed });
     }
 
-    // Rear half goes in opposite direction
+    // Rear half: opposite direction, drops one row immediately
     if (rearSegs.length > 0) {
-        centipedes.push({
-            segments: rearSegs,
-            direction: -centi.direction,
-            speed: centi.speed
-        });
+        for (var r = 0; r < rearSegs.length; r++) {
+            rearSegs[r].y += 20;   // drop one row
+        }
+        centipedes.push({ segments: rearSegs, direction: -centi.direction, speed: centi.speed });
     }
 }
 
-// Move all centipedes one frame (boustrophedon descent)
+// Boustrophedon movement: horizontal across row, drop on wall/mushroom contact.
 function updateCentipedes() {
-    var dropAmount = 20; // pixels to drop when hitting wall or mushroom
+    var DROP = 20;
 
     for (var ci = centipedes.length - 1; ci >= 0; ci--) {
         var c = centipedes[ci];
+        if (!c.segments || !c.segments.length) { centipedes.splice(ci, 1); continue; }
+
         var head = c.segments[0];
+        var wantX = head.x + c.speed * c.direction;
 
-        // Compute desired new head position
-        var newX = head.x + c.speed * c.direction;
+        // --- wall check ---
+        var blocked = false;
+        if (c.direction === 1 && wantX > canvas.width - head.size) { blocked = true; }
+        if (c.direction === -1 && wantX < head.size) { blocked = true; }
 
-        // Check wall collision
-        var hitWall = false;
-        if (c.direction === 1 && newX > canvas.width - head.size) {
-            hitWall = true;
-            newX = canvas.width - head.size;
-        } else if (c.direction === -1 && newX < head.size) {
-            hitWall = true;
-            newX = head.size;
-        }
-
-        // Check mushroom collision at new position
-        var hitMushroom = false;
-        if (!hitWall) {
+        // --- mushroom check (head only) ---
+        if (!blocked) {
             for (var mi = 0; mi < mushrooms.length; mi++) {
                 var m = mushrooms[mi];
-                if (Math.abs(newX - m.x) < head.size + m.radius * 0.6 &&
+                if (Math.abs(wantX - m.x) < head.size + m.radius * 0.6 &&
                     Math.abs(head.y - m.y) < head.size + m.radius * 0.6) {
-                    hitMushroom = true;
-                    break;
+                    blocked = true; break;
                 }
             }
         }
 
-        // If hit wall or mushroom: drop one row, reverse direction, move body down too
-        if (hitWall || hitMushroom) {
-            head.y += dropAmount;
-            // Also move the first body segment down to avoid overlap
-            if (c.segments.length > 1) {
-                c.segments[1].y += dropAmount;
+        if (blocked) {
+            // Drop entire centipede one row, reverse direction
+            for (var s = 0; s < c.segments.length; s++) {
+                c.segments[s].y += DROP;
             }
             c.direction *= -1;
         } else {
-            // Normal horizontal movement
-            head.x = newX;
-        }
-
-        // Body segments follow: each segment moves toward the one ahead
-        for (var i = 1; i < c.segments.length; i++) {
-            var prev = c.segments[i - 1];
-            var curr = c.segments[i];
-
-            // Move horizontally toward previous segment
-            var dx = prev.x - curr.x;
-            if (Math.abs(dx) > 2) {
-                curr.x += Math.sign(dx) * c.speed;
-            }
-
-            // Stay on same row as previous segment (with slight lag for organic feel)
-            if (Math.abs(prev.y - curr.y) > 1) {
-                curr.y += Math.sign(prev.y - curr.y) * c.speed;
+            // Move ALL segments horizontally together (maintain formation)
+            for (var s = 0; s < c.segments.length; s++) {
+                c.segments[s].x += c.speed * c.direction;
             }
         }
 
-        // Check if head reached bottom area (near player)
-        if (head.y > canvas.height - 80) {
-            // Centipede reached bottom - check contact with player
-            if (!player.invincible && circleCollision(
-                head.x, head.y, head.size * 0.5,
-                player.x, player.y, player.width * 0.3
-            )) {
-                lives--;
-                spawnParticles(player.x, player.y, '#00ff00', 25);
-                playerHitSound();
-
-                if (lives <= 0) {
-                    gameState = 'gameover';
-                    if (score > highScore) {
-                        highScore = score;
-                        localStorage.setItem('centipede_high', '' + highScore);
-                    }
-                } else {
-                    resetPlayer();
-                }
-            }
-
-            // Centipede goes off bottom - remove it, schedule new one
-            centipedes.splice(ci, 1);
-            if (centipedes.length === 0) {
-                // All centipedes gone off bottom - spawn new one after delay
-                newCentipedePending = true;
-                newCentipedeTimer = 600; // 10 seconds at 60fps
-            }
-        }
-
-        // Check any segment contact with player
+        // --- player contact (any segment) ---
         for (var si = 0; si < c.segments.length; si++) {
             var seg = c.segments[si];
             if (!player.invincible && circleCollision(
                 seg.x, seg.y, seg.size * 0.5,
-                player.x, player.y, player.width * 0.3
-            )) {
+                player.x, player.y, player.width * 0.3)) {
                 lives--;
                 spawnParticles(player.x, player.y, '#00ff00', 25);
                 playerHitSound();
-
                 if (lives <= 0) {
                     gameState = 'gameover';
-                    if (score > highScore) {
-                        highScore = score;
-                        localStorage.setItem('centipede_high', '' + highScore);
-                    }
-                } else {
-                    resetPlayer();
-                }
+                    if (score > highScore) { highScore = score; localStorage.setItem('centipede_high', '' + highScore); }
+                } else { resetPlayer(); }
                 break;
             }
         }
+
+        // --- off bottom? remove and schedule replacement ---
+        if (head.y > canvas.height + 30) {
+            centipedes.splice(ci, 1);
+        }
     }
 
-    // Handle new centipede spawn timer
+    // --- spawn timer (10 s after last centipede leaves) ---
     if (newCentipedePending) {
         newCentipedeTimer--;
         if (newCentipedeTimer <= 0) {
@@ -314,12 +241,24 @@ function updateCentipedes() {
         }
     }
 
-    // Check wave completion (all centipedes destroyed by shooting, not bottom)
+    // --- all gone? either wave complete or waiting for respawn ---
     if (centipedes.length === 0 && !newCentipedePending) {
+        // Check: did they all get shot or scroll off bottom?
+        // If we just cleared a wave by shooting, advance.
+        // If they scrolled off bottom, start the 10s timer.
+        // We distinguish by checking if newCentipedePending was set during the loop above.
+        // Since it wasn't, this means they were all destroyed by shooting -> next wave.
         wave++;
         waveSound();
         createMushrooms();
         createCentipede();
+    }
+
+    // If all centipedes scrolled off bottom (none left, timer not pending yet), start it
+    if (centipedes.length === 0 && !newCentipedePending) {
+        // This can only happen if they all left in the same frame.
+        newCentipedePending = true;
+        newCentipedeTimer = 600; // ~10 seconds at 60fps
     }
 }
 
