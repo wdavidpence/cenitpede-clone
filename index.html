@@ -121,11 +121,11 @@ function removeMushroom(col, row) {
 
 function createMushrooms() {
     mushrooms.length = 0;
-    // Fill rows 1..GRID_ROWS-3 with ~50% density for authentic serpentine weaving
-    // Centipede hits mushrooms frequently, drops rows, and reverses — creating the twisty descent
+    // Fill rows 1..GRID_ROWS-3 with ~25% density for authentic boustrophedon movement
+    // Low enough that centipedes traverse most of each row before dropping on mushrooms
     for (var r = 1; r < GRID_ROWS - 3; r++) {
         for (var c = 0; c < GRID_COLS; c++) {
-            if (Math.random() > 0.5) {
+            if (Math.random() > 0.75) {
                 mushrooms.push({ col: c, row: r, hp: 4 });
             }
         }
