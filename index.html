@@ -250,9 +250,16 @@ function updateCentipedes() {
                 var seg = c.segments[i];
                 var prevPos = prevPositions[i - 1];
 
-                // Move into predecessor's previous position — no independent mushroom checks
-                seg.col = prevPos.col;
-                seg.row = prevPos.row;
+                // Try to move into predecessor's previous position
+                if (mushroomAt(prevPos.col, prevPos.row)) {
+                    // Blocked by mushroom — drop one row (creates serpentine weaving)
+                    seg.row = prevPos.row + 1;
+                    seg.col = prevPos.col;
+                } else {
+                    // Clear path — move into predecessor's old position
+                    seg.col = prevPos.col;
+                    seg.row = prevPos.row;
+                }
             }
 
             // --- player contact (any segment) ---
