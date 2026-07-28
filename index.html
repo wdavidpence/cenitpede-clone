@@ -200,11 +200,11 @@ function splitCentipede(centi, segIndex) {
     }
 }
 
-// Grid-based boustrophedon movement with trail-following.
+// Grid-based boustrophedon movement with independent segment checks.
 // Head: moves horizontally, drops 1 row + reverses on wall/mushroom contact.
-// Body segments: follow predecessor's previous position (snake chain) — no independent drops.
-// When the head drops a row, that drop propagates down the chain with delay, creating serpentine curves.
-// This is the authentic Centipede movement pattern.
+// Body segments: each moves forward independently in the current direction.
+// If blocked by mushroom or wall, drops one row — creates squirming where segments
+// occupy different rows simultaneously (authentic Centipede behavior).
 function updateCentipedes() {
     var scrolledOff = false;
 
@@ -245,20 +245,25 @@ function updateCentipedes() {
                 head.col = nextCol;
             }
 
-            // --- Body segments follow predecessor's previous position (snake chain) ---
+            // --- Body segments: each tries to move forward independently ---
+            // Authentic Centipede behavior: every segment advances in the current direction.
+            // If blocked by mushroom or wall, it drops one row (and tries again).
+            // This creates the squirming effect where segments occupy different rows simultaneously.
             for (var i = 1; i < c.segments.length; i++) {
                 var seg = c.segments[i];
-                var prevPos = prevPositions[i - 1];
+                var nextCol = seg.col + c.direction;
 
-                // Try to move into predecessor's previous position
-                if (mushroomAt(prevPos.col, prevPos.row)) {
-                    // Blocked by mushroom — drop one row (creates serpentine weaving)
-                    seg.row = prevPos.row + 1;
-                    seg.col = prevPos.col;
+                // Check wall or mushroom at (nextCol, seg.row)
+                var blocked = false;
+                if (nextCol < 0 || nextCol >= GRID_COLS) { blocked = true; }
+                else if (mushroomAt(nextCol, seg.row)) { blocked = true; }
+
+                if (blocked) {
+                    // Drop one row when blocked — creates serpentine weaving
+                    seg.row += 1;
                 } else {
-                    // Clear path — move into predecessor's old position
-                    seg.col = prevPos.col;
-                    seg.row = prevPos.row;
+                    // Move forward
+                    seg.col = nextCol;
                 }
             }
 
