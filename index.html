@@ -374,131 +374,152 @@ function update() {
     // Update bullets
     for (var i = bullets.length - 1; i >= 0; i--) {
         var b = bullets[i];
+
+        // Move bullet upward
         b.y -= b.speed;
-        
-        // Remove off-screen
-        if (b.y < -10) {
-            bullets.splice(i, 1);
-            continue;
-        }
-        
-        // Bullet vs Centipede head/body
-        for (var j = centipede.length - 1; j >= 0; j--) {
+
+        var hitSomething = false;
+
+        // Bullet vs Centipede head/body (iterate HEAD to TAIL so head gets priority)
+        for (var j = 0; j < centipede.length; j++) {
             var seg = centipede[j];
             if (circleCollision(b.x, b.y, b.size, seg.x, seg.y, seg.size)) {
                 bullets.splice(i, 1);
-                
+                hitSomething = true;
+
                 if (seg.isHead) {
                     // HEADSHOT: Head dies, body splits into TWO centipedes
                     splatSound();
-                    
+
                     // Spawn two split centipedes from body segments
                     var segsPerSplit = Math.max(2, Math.floor(seg.bodyIndex / 2));
                     addSplit(seg.x - seg.size * 2, seg.y, -1); // left
                     addSplit(seg.x + seg.size * 2, seg.y, 1); // right
-                    
+
                     comboCount++;
                     comboTimer = 120; // 2 seconds for combo
-                    
+
                     var points = 50 * (seg.bodyIndex + 1) * Math.max(1, comboCount);
                     score += points;
-                    
+
                     spawnParticles(seg.x, seg.y, '#ff0000', 15);
                 } else {
                     // BODY HIT: Segment dies, leaves behind a mushroom
                     hitSound();
-                    
+
                     comboCount++;
                     comboTimer = 120;
-                    
+
                     var points = 10 * (seg.bodyIndex + 1) * Math.max(1, comboCount);
                     score += points;
-                    
+
                     // Drop a mushroom at death location
                     mushrooms.push({
                         x: seg.x, y: seg.y, hp: 4, radius: seg.size
                     });
-                    
+
                     spawnParticles(seg.x, seg.y, '#ff4444', 8);
                 }
-                
+
                 centipede.splice(j, 1);
                 break; // bullet consumed
             }
         }
-        
-        // Bullet vs Split Centipedes
-        for (var si = splitCentipedes.length - 1; si >= 0; si--) {
-            var sc = splitCentipedes[si];
-            for (var sj = sc.segments.length - 1; sj >= 0; sj--) {
-                var sseg = sc.segments[sj];
-                if (circleCollision(b.x, b.y, b.size, sseg.x, sseg.y, sseg.size)) {
-                    bullets.splice(i, 1);
-                    
-                    score += 5;
-                    comboCount++;
-                    comboTimer = 120;
-                    
-                    spawnParticles(sseg.x, sseg.y, '#ff8844', 6);
-                    splatSound();
-                    
-                    sc.segments.splice(sj, 1);
-                    if (sc.segments.length === 0) {
-                        splitCentipedes.splice(si, 1);
+
+        if (!hitSomething) {
+            // Bullet vs Split Centipedes (iterate HEAD to TAIL for each split centipede)
+            for (var si = 0; si < splitCentipedes.length; si++) {
+                var sc = splitCentipedes[si];
+                for (var sj = 0; sj < sc.segments.length; sj++) {
+                    var sseg = sc.segments[sj];
+                    if (circleCollision(b.x, b.y, b.size, sseg.x, sseg.y, sseg.size)) {
+                        bullets.splice(i, 1);
+                        hitSomething = true;
+
+                        score += 5;
+                        comboCount++;
+                        comboTimer = 120;
+
+                        spawnParticles(sseg.x, sseg.y, '#ff8844', 6);
+                        splatSound();
+
+                        sc.segments.splice(sj, 1);
+                        if (sc.segments.length === 0) {
+                            splitCentipedes.splice(si, 1);
+                        }
+                        break; // bullet consumed
                     }
+                }
+                if (hitSomething) break;
+            }
+        }
+
+        if (!hitSomething) {
+            // Bullet vs Spider
+            if (spider && circleCollision(b.x, b.y, b.size, spider.x, spider.y, spider.size)) {
+                bullets.splice(i, 1);
+                hitSomething = true;
+                score += 100;
+
+                spawnParticles(spider.x, spider.y, '#8B4513', 20);
+                splatSound();
+
+                spider = null;
+                spiderTimer = 400 + Math.random() * 300;
+            }
+        }
+
+        if (!hitSomething) {
+            // Bullet vs Fleas (iterate HEAD to TAIL)
+            for (var fi = 0; fi < fleas.length; fi++) {
+                var f = fleas[fi];
+                if (circleCollision(b.x, b.y, b.size, f.x, f.y, f.size)) {
+                    bullets.splice(i, 1);
+                    hitSomething = true;
+                    score += 50;
+
+                    spawnParticles(f.x, f.y, '#8B0000', 12);
+                    splatSound();
+
+                    fleas.splice(fi, 1);
                     break; // bullet consumed
                 }
             }
         }
-        
-        // Bullet vs Spider
-        if (spider && circleCollision(b.x, b.y, b.size, spider.x, spider.y, spider.size)) {
-            bullets.splice(i, 1);
-            score += 100;
 
-            spawnParticles(spider.x, spider.y, '#8B4513', 20);
-            splatSound();
+        if (!hitSomething) {
+            // Bullet vs Mushrooms (degrade them) - iterate TAIL to HEAD for natural feel
+            for (var mi = mushrooms.length - 1; mi >= 0; mi--) {
+                var m = mushrooms[mi];
+                if (circleCollision(b.x, b.y, b.size, m.x, m.y, m.radius)) {
+                    bullets.splice(i, 1);
+                    hitSomething = true;
 
-            spider = null;
-            spiderTimer = 400 + Math.random() * 300;
-        }
-        
-        // Bullet vs Fleas
-        for (var fi = fleas.length - 1; fi >= 0; fi--) {
-            var f = fleas[fi];
-            if (circleCollision(b.x, b.y, b.size, f.x, f.y, f.size)) {
-                bullets.splice(i, 1);
-                score += 50;
-                
-                spawnParticles(f.x, f.y, '#8B0000', 12);
-                splatSound();
-                
-                fleas.splice(fi, 1);
-                break;
-            }
-        }
-        
-        // Bullet vs Mushrooms (degrade them)
-        for (var mi = mushrooms.length - 1; mi >= 0; mi--) {
-            var m = mushrooms[mi];
-            if (circleCollision(b.x, b.y, b.size, m.x, m.y, m.radius)) {
-                bullets.splice(i, 1);
-                
-                mushroomSound();
-                m.hp--;
-                
-                if (m.hp <= 0) {
-                    score += 3;
-                    spawnParticles(m.x, m.y, mushroomColor(m.hp + 1), 5);
-                    mushrooms.splice(mi, 1);
+                    mushroomSound();
+                    m.hp--;
+
+                    if (m.hp <= 0) {
+                        score += 3;
+                        spawnParticles(m.x, m.y, mushroomColor(m.hp + 1), 5);
+                        mushrooms.splice(mi, 1);
+                    }
+
+                    break; // bullet consumed
                 }
-                
-                break; // bullet consumed
             }
+        }
+
+        // Remove off-screen bullets LAST (after all collision checks)
+        if (!hitSomething && b.y < -10) {
+            bullets.splice(i, 1);
+        }
+
+        // Also remove if below player (shouldn't happen but safety)
+        if (!hitSomething && b.y > canvas.height + 20) {
+            bullets.splice(i, 1);
         }
     }
-    
-    // Update Centipede (snake-like descent)
+
     var moveDown = false;
     
     // Head movement
