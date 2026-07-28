@@ -121,10 +121,11 @@ function removeMushroom(col, row) {
 
 function createMushrooms() {
     mushrooms.length = 0;
-    // Fill rows 1..GRID_ROWS-3 with ~65% density (original Centipede style)
+    // Fill rows 1..GRID_ROWS-3 with ~35% density (original Centipede style)
+    // Lower density lets centipedes traverse full rows before dropping
     for (var r = 1; r < GRID_ROWS - 3; r++) {
         for (var c = 0; c < GRID_COLS; c++) {
-            if (Math.random() > 0.35) {
+            if (Math.random() > 0.65) {
                 mushrooms.push({ col: c, row: r, hp: 4 });
             }
         }
@@ -150,18 +151,18 @@ var newCentipedePending = false;
 
 // Centipede movement: step-based. Each frame, advance head by 1 cell horizontally.
 // If blocked (wall or mushroom), drop that segment one row and reverse direction.
-// Body segments follow: each tries to move into the cell the predecessor occupied.
+// Body segments follow predecessor's previous position (snake chain) — no independent drops.
 var centiStepAccum = 0; // accumulator for smooth movement
 
 function createCentipede() {
     var numSegs = 12 + wave * 2;
-    // Start in middle of top row, alternating left/right like original
-    var startCol = Math.floor(GRID_COLS / 2);
-    var dir = (Math.random() < 0.5) ? -1 : 1;
+    // Start in top-left, moving right (boustrophedon descent)
+    var startCol = 0;
+    var dir = 1;
 
     var segs = [];
     for (var i = 0; i < numSegs; i++) {
-        segs.push({ col: startCol - i * dir, row: 0 });
+        segs.push({ col: startCol + i, row: 0 });
     }
 
     centipedes.push({
@@ -201,8 +202,8 @@ function splitCentipede(centi, segIndex) {
 
 // Grid-based boustrophedon movement with trail-following.
 // Head determines direction and drops on obstacles.
-// Body segments follow the predecessor's previous position (snake chain).
-// This creates natural serpentine curves as segments trace different paths.
+// Body segments follow the predecessor's previous position (snake chain) — no independent drops.
+// This creates natural serpentine curves as segments trace different paths at a delay.
 function updateCentipedes() {
     var scrolledOff = false;
 
@@ -248,15 +249,9 @@ function updateCentipedes() {
                 var seg = c.segments[i];
                 var prevPos = prevPositions[i - 1];
 
-                // Move into predecessor's previous position
+                // Move into predecessor's previous position — no independent drops
                 seg.col = prevPos.col;
                 seg.row = prevPos.row;
-
-                // If this segment would be blocked by a mushroom at its new position,
-                // it drops one row instead (creating the twisting effect)
-                if (mushroomAt(seg.col, seg.row)) {
-                    seg.row += 1;
-                }
             }
 
             // --- player contact (any segment) ---
