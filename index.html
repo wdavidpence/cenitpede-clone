@@ -23,13 +23,24 @@ canvas { display: block; width: 100vw; height: 100vh; }
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// --- Grid-based layout (original Centipede: 30x30 grid) ---
+var GRID_COLS = 30;
+var GRID_ROWS = 28;   // playable rows (row 0 = HUD, row 29+ = player area)
+var cellW, cellH;
+
 // --- Canvas sizing for iPhone portrait ---
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    cellW = canvas.width / GRID_COLS;
+    cellH = (canvas.height - 60) / GRID_ROWS; // leave room for HUD + player
 }
 resize();
 window.addEventListener('resize', resize);
+
+// Convert grid coords to pixel coords
+function gx(col) { return col * cellW + cellW / 2; }
+function gy(row) { return row * cellH + cellH / 2 + 30; } // +30 for HUD offset
 
 // --- Audio Engine (Web Audio API) ---
 let audioCtx = null;
@@ -84,21 +95,37 @@ var player = {
 // --- Bullets ---
 var bullets = [];
 
-// --- Mushroom Field (degradable) ---
+// --- Mushroom Field (grid-based, degradable) ---
 var mushrooms = [];
+
+function mushroomAt(col, row) {
+    for (var i = 0; i < mushrooms.length; i++) {
+        if (mushrooms[i].col === col && mushrooms[i].row === row) return mushrooms[i];
+    }
+    return null;
+}
+
+function addMushroom(col, row) {
+    if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return;
+    if (mushroomAt(col, row)) return; // already one there
+    mushrooms.push({ col: col, row: row, hp: 4 });
+}
+
+function removeMushroom(col, row) {
+    for (var i = mushrooms.length - 1; i >= 0; i--) {
+        if (mushrooms[i].col === col && mushrooms[i].row === row) {
+            mushrooms.splice(i, 1); return;
+        }
+    }
+}
+
 function createMushrooms() {
     mushrooms.length = 0;
-    var cols = Math.floor(canvas.width / 40);
-    var rows = 10;
-    for (var r = 0; r < rows; r++) {
-        for (var c = 0; c < cols; c++) {
+    // Fill rows 1..GRID_ROWS-3 with ~65% density (original Centipede style)
+    for (var r = 1; r < GRID_ROWS - 3; r++) {
+        for (var c = 0; c < GRID_COLS; c++) {
             if (Math.random() > 0.35) {
-                mushrooms.push({
-                    x: c * 40 + 20,
-                    y: r * (canvas.height / rows) + 30,
-                    hp: 4, // degrades through colors
-                    radius: 16
-                });
+                mushrooms.push({ col: c, row: r, hp: 4 });
             }
         }
     }
@@ -115,28 +142,31 @@ function mushroomColor(hp) {
     }
 }
 
-// --- Centipedes (array of independent centipede objects) ---
-// Each: { segments: [{x, y, size}], direction: 1|-1, speed: N }
+// --- Centipedes (grid-based, array of independent centipede objects) ---
+// Each: { segments: [{col, row}], direction: 1|-1 }
 var centipedes = [];
 var newCentipedeTimer = 0;   // frames until replacement spawns (600 = ~10s)
 var newCentipedePending = false;
 
+// Centipede movement: step-based. Each frame, advance head by 1 cell horizontally.
+// If blocked (wall or mushroom), drop that segment one row and reverse direction.
+// Body segments follow: each tries to move into the cell the predecessor occupied.
+var centiStepAccum = 0; // accumulator for smooth movement
+
 function createCentipede() {
     var numSegs = 12 + wave * 2;
-    var segSize = Math.max(10, 16 - wave);
-    var spacing = segSize * 2.5;
-    var startY = 40;
-    var startX = segSize + 10;
+    // Start in middle of top row, alternating left/right like original
+    var startCol = Math.floor(GRID_COLS / 2);
+    var dir = (Math.random() < 0.5) ? -1 : 1;
 
     var segs = [];
     for (var i = 0; i < numSegs; i++) {
-        segs.push({ x: startX + i * spacing, y: startY, size: segSize });
+        segs.push({ col: startCol - i * dir, row: 0 });
     }
 
     centipedes.push({
         segments: segs,
-        direction: 1,   // right first
-        speed: Math.max(1.5, 3 - wave * 0.2)
+        direction: dir
     });
 }
 
@@ -145,8 +175,8 @@ function createCentipede() {
 function splitCentipede(centi, segIndex) {
     var seg = centi.segments[segIndex];
 
-    // Hit segment becomes mushroom
-    mushrooms.push({ x: seg.x, y: seg.y, hp: 4, radius: seg.size });
+    // Hit segment becomes mushroom at its grid cell
+    addMushroom(seg.col, seg.row);
 
     var frontSegs = centi.segments.slice(0, segIndex);
     var rearSegs  = centi.segments.slice(segIndex + 1);
@@ -157,80 +187,100 @@ function splitCentipede(centi, segIndex) {
 
     // Front half: same direction
     if (frontSegs.length > 0) {
-        centipedes.push({ segments: frontSegs, direction: centi.direction, speed: centi.speed });
+        centipedes.push({ segments: frontSegs, direction: centi.direction });
     }
 
     // Rear half: opposite direction, drops one row immediately
     if (rearSegs.length > 0) {
         for (var r = 0; r < rearSegs.length; r++) {
-            rearSegs[r].y += 20;   // drop one row
+            rearSegs[r].row += 1;   // drop one grid row
         }
-        centipedes.push({ segments: rearSegs, direction: -centi.direction, speed: centi.speed });
+        centipedes.push({ segments: rearSegs, direction: -centi.direction });
     }
 }
 
-// Boustrophedon movement: horizontal across row, drop on wall/mushroom contact.
+// Grid-based boustrophedon movement.
+// Each segment moves independently: head advances horizontally, drops on block.
+// Body segments follow the predecessor's previous position (snake chain).
 function updateCentipedes() {
-    var DROP = 20;
     var scrolledOff = false;
 
-    for (var ci = centipedes.length - 1; ci >= 0; ci--) {
-        var c = centipedes[ci];
-        if (!c.segments || !c.segments.length) { centipedes.splice(ci, 1); continue; }
+    // Speed: cells per second. Original: 15 on odd stages, 7.5 on even (up to stage 8).
+    var cellsPerSec = (wave % 2 === 1 || wave > 8) ? 15 : 7.5;
+    var cellsPerFrame = cellsPerSec / 60;
 
-        var head = c.segments[0];
-        var wantX = head.x + c.speed * c.direction;
+    centiStepAccum += cellsPerFrame;
 
-        // --- wall check ---
-        var blocked = false;
-        if (c.direction === 1 && wantX > canvas.width - head.size) { blocked = true; }
-        if (c.direction === -1 && wantX < head.size) { blocked = true; }
+    while (centiStepAccum >= 1) {
+        centiStepAccum -= 1;
 
-        // --- mushroom check (head only) ---
-        if (!blocked) {
-            for (var mi = 0; mi < mushrooms.length; mi++) {
-                var m = mushrooms[mi];
-                if (Math.abs(wantX - m.x) < head.size + m.radius * 0.6 &&
-                    Math.abs(head.y - m.y) < head.size + m.radius * 0.6) {
-                    blocked = true; break;
+        for (var ci = centipedes.length - 1; ci >= 0; ci--) {
+            var c = centipedes[ci];
+            if (!c.segments || !c.segments.length) { centipedes.splice(ci, 1); continue; }
+
+            // --- Move head ---
+            var head = c.segments[0];
+            var nextCol = head.col + c.direction;
+
+            // Check wall or mushroom at (nextCol, head.row)
+            var blocked = false;
+            if (nextCol < 0 || nextCol >= GRID_COLS) { blocked = true; }
+            else if (mushroomAt(nextCol, head.row)) { blocked = true; }
+
+            if (blocked) {
+                // Drop ALL segments one row, reverse direction
+                for (var s = 0; s < c.segments.length; s++) {
+                    c.segments[s].row += 1;
+                }
+                c.direction *= -1;
+            } else {
+                // Move head forward
+                head.col = nextCol;
+
+                // Body segments follow: each moves toward predecessor's position
+                for (var i = 1; i < c.segments.length; i++) {
+                    var prev = c.segments[i - 1];
+                    var curr = c.segments[i];
+
+                    // If predecessor is on same row, move horizontally toward it
+                    if (prev.row === curr.row) {
+                        var dc = prev.col - curr.col;
+                        if (Math.abs(dc) > 0) {
+                            curr.col += Math.sign(dc);
+                        }
+                    } else if (prev.row < curr.row) {
+                        // Predecessor is above: move up one row, then toward its col
+                        curr.row -= 1;
+                    } else if (prev.row > curr.row) {
+                        // Predecessor is below: move down one row
+                        curr.row += 1;
+                    }
                 }
             }
-        }
 
-        if (blocked) {
-            // Drop entire centipede one row, reverse direction
-            for (var s = 0; s < c.segments.length; s++) {
-                c.segments[s].y += DROP;
+            // --- player contact (any segment) ---
+            for (var si = 0; si < c.segments.length; si++) {
+                var seg = c.segments[si];
+                var sx = gx(seg.col), sy = gy(seg.row);
+                if (!player.invincible && circleCollision(
+                    sx, sy, cellW * 0.45,
+                    player.x, player.y, player.width * 0.3)) {
+                    lives--;
+                    spawnParticles(player.x, player.y, '#00ff00', 25);
+                    playerHitSound();
+                    if (lives <= 0) {
+                        gameState = 'gameover';
+                        if (score > highScore) { highScore = score; localStorage.setItem('centipede_high', '' + highScore); }
+                    } else { resetPlayer(); }
+                    break;
+                }
             }
-            c.direction *= -1;
-        } else {
-            // Move ALL segments horizontally together (maintain formation)
-            for (var s = 0; s < c.segments.length; s++) {
-                c.segments[s].x += c.speed * c.direction;
-            }
-        }
 
-        // --- player contact (any segment) ---
-        for (var si = 0; si < c.segments.length; si++) {
-            var seg = c.segments[si];
-            if (!player.invincible && circleCollision(
-                seg.x, seg.y, seg.size * 0.5,
-                player.x, player.y, player.width * 0.3)) {
-                lives--;
-                spawnParticles(player.x, player.y, '#00ff00', 25);
-                playerHitSound();
-                if (lives <= 0) {
-                    gameState = 'gameover';
-                    if (score > highScore) { highScore = score; localStorage.setItem('centipede_high', '' + highScore); }
-                } else { resetPlayer(); }
-                break;
+            // --- off bottom? remove and flag it ---
+            if (head.row >= GRID_ROWS) {
+                scrolledOff = true;
+                centipedes.splice(ci, 1);
             }
-        }
-
-        // --- off bottom? remove and flag it ---
-        if (head.y > canvas.height + 30) {
-            scrolledOff = true;
-            centipedes.splice(ci, 1);
         }
     }
 
@@ -405,6 +455,7 @@ function startGame() {
     lives = 3;
     wave = 1;
     comboCount = 0;
+    centiStepAccum = 0;
     player.x = canvas.width / 2;
     player.y = canvas.height - 60;
     bullets.length = 0;
@@ -493,7 +544,8 @@ function update() {
             var c = centipedes[ci];
             for (var j = 0; j < c.segments.length; j++) {
                 var seg = c.segments[j];
-                if (circleCollision(b.x, b.y, b.size, seg.x, seg.y, seg.size)) {
+                var sx = gx(seg.col), sy = gy(seg.row);
+                if (circleCollision(b.x, b.y, b.size, sx, sy, cellW * 0.45)) {
                     bullets.splice(i, 1);
                     hitSomething = true;
 
@@ -507,12 +559,10 @@ function update() {
                         var points = 50 * Math.max(1, comboCount);
                         score += points;
 
-                        // Head becomes mushroom
-                        mushrooms.push({
-                            x: seg.x, y: seg.y, hp: 4, radius: seg.size
-                        });
+                        // Head becomes mushroom at grid cell
+                        addMushroom(seg.col, seg.row);
 
-                        spawnParticles(seg.x, seg.y, '#ff0000', 15);
+                        spawnParticles(sx, sy, '#ff0000', 15);
 
                         // Remove head; remaining body becomes new centipede going opposite direction
                         var remaining = c.segments.slice(1);
@@ -520,8 +570,7 @@ function update() {
                         if (remaining.length > 0) {
                             centipedes.push({
                                 segments: remaining,
-                                direction: -c.direction,
-                                speed: c.speed
+                                direction: -c.direction
                             });
                         }
                     } else {
@@ -534,7 +583,7 @@ function update() {
                         var points = 10 * Math.max(1, comboCount);
                         score += points;
 
-                        spawnParticles(seg.x, seg.y, '#ff4444', 8);
+                        spawnParticles(sx, sy, '#ff4444', 8);
 
                         // Split the centipede at this segment
                         splitCentipede(c, j);
@@ -581,7 +630,8 @@ function update() {
             // Bullet vs Mushrooms (degrade them)
             for (var mi = mushrooms.length - 1; mi >= 0; mi--) {
                 var m = mushrooms[mi];
-                if (circleCollision(b.x, b.y, b.size, m.x, m.y, m.radius)) {
+                var mx = gx(m.col), my = gy(m.row);
+                if (circleCollision(b.x, b.y, b.size, mx, my, cellW * 0.45)) {
                     bullets.splice(i, 1);
                     hitSomething = true;
 
@@ -590,8 +640,8 @@ function update() {
 
                     if (m.hp <= 0) {
                         score += 3;
-                        spawnParticles(m.x, m.y, mushroomColor(m.hp + 1), 5);
-                        mushrooms.splice(mi, 1);
+                        spawnParticles(mx, my, mushroomColor(m.hp + 1), 5);
+                        removeMushroom(m.col, m.row);
                     }
 
                     break; // bullet consumed
@@ -746,45 +796,48 @@ function drawPlayer() {
 }
 
 function drawCentipedes() {
+    var segSize = cellW * 0.4;
+
     for (var ci = 0; ci < centipedes.length; ci++) {
         var c = centipedes[ci];
-        
+
         for (var i = 0; i < c.segments.length; i++) {
             var seg = c.segments[i];
-            
+            var sx = gx(seg.col), sy = gy(seg.row);
+
             if (i === 0) {
                 ctx.fillStyle = '#ff0000'; // bright red head
             } else {
                 // Body alternates colors
                 ctx.fillStyle = i % 2 === 0 ? '#ff4444' : '#cc0000';
             }
-            
+
             // Draw segment with legs
             ctx.beginPath();
-            ctx.arc(seg.x, seg.y, seg.size, 0, Math.PI * 2);
+            ctx.arc(sx, sy, segSize, 0, Math.PI * 2);
             ctx.fill();
-            
+
             // Eyes on head
             if (i === 0) {
                 ctx.fillStyle = '#ffffff';
                 ctx.beginPath();
-                ctx.arc(seg.x - 4, seg.y - 3, 2.5, 0, Math.PI * 2);
+                ctx.arc(sx - 4, sy - 3, 2.5, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(seg.x + 4, seg.y - 3, 2.5, 0, Math.PI * 2);
+                ctx.arc(sx + 4, sy - 3, 2.5, 0, Math.PI * 2);
                 ctx.fill();
-                
+
                 // Pupils (face direction of travel)
                 ctx.fillStyle = '#000000';
                 var pupilOffset = c.direction === 1 ? 1 : -1;
                 ctx.beginPath();
-                ctx.arc(seg.x - 3 + pupilOffset, seg.y - 3, 1.2, 0, Math.PI * 2);
+                ctx.arc(sx - 3 + pupilOffset, sy - 3, 1.2, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(seg.x + 5 + pupilOffset, seg.y - 3, 1.2, 0, Math.PI * 2);
+                ctx.arc(sx + 5 + pupilOffset, sy - 3, 1.2, 0, Math.PI * 2);
                 ctx.fill();
             }
-            
+
             // Legs (small lines)
             ctx.strokeStyle = '#ff0000';
             ctx.lineWidth = 1;
@@ -792,13 +845,13 @@ function drawCentipedes() {
             for (var leg = -2; leg <= 2; leg++) {
                 var legOffset = (legPhase + i) % 2 === 0 ? -5 : -3;
                 ctx.beginPath();
-                ctx.moveTo(seg.x + leg * 3, seg.y - seg.size);
-                ctx.lineTo(seg.x + leg * 4 - 3, seg.y - seg.size + legOffset);
+                ctx.moveTo(sx + leg * 3, sy - segSize);
+                ctx.lineTo(sx + leg * 4 - 3, sy - segSize + legOffset);
                 ctx.stroke();
-                
+
                 ctx.beginPath();
-                ctx.moveTo(seg.x + leg * 3, seg.y - seg.size);
-                ctx.lineTo(seg.x + leg * 4 + 3, seg.y - seg.size + legOffset);
+                ctx.moveTo(sx + leg * 3, sy - segSize);
+                ctx.lineTo(sx + leg * 4 + 3, sy - segSize + legOffset);
                 ctx.stroke();
             }
         }
@@ -877,26 +930,29 @@ function drawFlea() {
 function drawMushrooms() {
     for (var i = 0; i < mushrooms.length; i++) {
         var m = mushrooms[i];
-        
+
+        var mx = gx(m.col), my = gy(m.row);
+        var r = cellW * 0.4;
+
         ctx.fillStyle = mushroomColor(m.hp);
-        
+
         // Draw mushroom cap (circle)
         ctx.beginPath();
-        ctx.arc(m.x, m.y - 5, m.radius, 0, Math.PI * 2);
+        ctx.arc(mx, my - 5, r, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Stem
         ctx.fillStyle = '#f5deb3';
-        ctx.fillRect(m.x - 4, m.y - 2, 8, m.radius);
-        
+        ctx.fillRect(mx - 4, my - 2, 8, r);
+
         // Spots on cap (when fresh)
         if (m.hp >= 3) {
             ctx.fillStyle = '#ffffff';
             ctx.beginPath();
-            ctx.arc(m.x - 5, m.y - 10, 2.5, 0, Math.PI * 2);
+            ctx.arc(mx - 5, my - 10, 2.5, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
-            ctx.arc(m.x + 5, m.y - 8, 2.5, 0, Math.PI * 2);
+            ctx.arc(mx + 5, my - 8, 2.5, 0, Math.PI * 2);
             ctx.fill();
         }
     }
